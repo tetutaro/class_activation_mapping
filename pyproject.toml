@@ -1,0 +1,61 @@
+[tool.poetry]
+name = "class-activation-mapping"
+version = "0.0.0"  # Automatically updated up poetry-dynamic-versioning
+description = ""
+authors = ["Tetsutaro Maruyama <tetsutaro.maruyama@gmail.com>"]
+repository = "https://github.com/tetutaro/class_activation_mapping"
+packages = [{include = "class_activation_mapping"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+[tool.poetry.group.dev.dependencies]
+black = "^22.12.0"
+flake8 = "4.0.1"
+mypy = "^0.991"
+pytest = "^7.2.1"
+pytest-cov = "^4.0.0"
+pytest-flake8 = "^1.1.1"
+pytest-mypy = "^0.10.3"
+sphinx = "^6.1.3"
+sphinx-rtd-theme = "1.2.0rc2"
+sphinx-pyproject-poetry = {git = "https://github.com/tetutaro/sphinx_pyproject_poetry.git"}
+python-lsp-server = "^1.7.1"
+
+[build-system]
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning"]
+build-backend = "poetry_dynamic_versioning.backend"
+
+[tool.poetry-dynamic-versioning]
+enable = true
+vcs = "git"
+format = "{base}"
+style = "pep440"
+
+[tool.poetry-dynamic-versioning.substitution]
+files = ["class_activation_mapping/__init__.py"]
+
+# [tool.flake8]
+# -> .flake8
+
+[tool.black]
+line-length = 79
+include = "\\.pyi?$"
+
+[tool.mypy]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+addopts = "-v --cov --flake8 --mypy"
+filterwarnings = """
+    ignore:SelectableGroups dict interface is deprecated. Use select.
+"""
+
+[tool.sphinx-pyproject]
+copyright = "2023, Tetsutaro Maruyama <tetsutaro.maruyama@gmail.com>"
+extensions = ["sphinx.ext.autodoc", "sphinx.ext.napoleon", "sphinx.ext.linkcode", "sphinx.ext.githubpages", "sphinx_rtd_theme"]
+templates_path = ["_templates"]
+exclude_patterns = []
+language = "ja"
+html_theme = "sphinx_rtd_theme"
+html_static_path = ["_static"]
