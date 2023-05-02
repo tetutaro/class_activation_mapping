@@ -295,7 +295,7 @@ class BaseCAM(CNN, ABC):
         # SVD (singular value decomposition)
         Ch, SS, _ = torch.linalg.svd(CP_std, full_matrices=False)
         # get the first eigenvector of the channel feature matrix and normalize
-        weight: Tensor = F.normalize(Ch.real[:, [SS.argmax()]], dim=0).view(
+        weight: Tensor = F.normalize(Ch.real[:, SS.argmax()], dim=0).view(
             1, k, 1, 1
         )
         # the eigen-vector may have the opposite sign
@@ -357,10 +357,18 @@ class BaseCAM(CNN, ABC):
             if self.blur_image:
                 mapped_image += (1.0 - dict_smap["norm"]) * self.blurred_image
             # forward network
-            self._forward_net(image=self.image * dict_smap["norm"])
+            self._forward(
+                image=self.image * dict_smap["norm"],
+                requires_grad=False,
+            )
             weights.append(self.score - orig_score)
-        # normalize weights (softmax)
-        normed_weight: Tensor = F.softmax(
+        # normalize weight
+        # The paper of Score-CAM use softmax for normalization.
+        # But softmax turns negative values into positive values.
+        # For that reason, if the target class is not the first rank,
+        # the positive region of saliency map can't show the target.
+        # So, I use normalization with L2-norm instead of softmax.
+        normed_weight: Tensor = F.normalize(
             torch.tensor(weights).to(self.device), dim=0
         )
         # create final weights

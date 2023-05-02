@@ -28,7 +28,6 @@ class ScoreCAM(BaseCAM):
         target: TargetLayer = "last",
         n_channels: int = -1,
     ) -> None:
-        self._assert_target_is_last(target=target)
         super().__init__(
             resource=resource,
             target=target,
@@ -44,4 +43,4 @@ class ScoreCAM(BaseCAM):
         return
 
     def _create_weights(self: ScoreCAM) -> Weights:
-        return self._extract_class_weights()
+        return self._create_dummy_weights()
