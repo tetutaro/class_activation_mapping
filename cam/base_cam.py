@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 from __future__ import annotations
-from typing import Optional
+from typing import List, Dict, Optional
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -14,6 +14,7 @@ import matplotlib as mpl
 from cam.cnn import CNN
 from cam.utils import draw_image_heatmap
 from cam.libs_cam import TargetLayer, ResourceCNN, Weights, SaliencyMaps
+from cam.libs_cam import batch_size, channel_size
 
 
 class BaseCAM(CNN, ABC):
@@ -24,24 +25,22 @@ class BaseCAM(CNN, ABC):
     the CNN model pays attention (or doesn't pay attention)
     to determine the indicated label.
 
-    There are following 6 processes to create the saliency map.
+    There are following 5 processes to create the saliency map.
 
     #. forward the image to CNN and get activations
         * if needed, backward the score and get gradients (require_grad=True)
         * self._forward()
     #. create weights for activations
         * self._create_weights()
-    #. weight activation with the weights above
+    #. weight activation with the weights and enlarge them to the image size
         * I named the weighted activation as "Channel Saliency Map"
         * self._create_channel_smaps()
     #. merge channel saliency maps over channels
         * I named the merged channel saliency map as "Layer Saliency Map"
         * self._create_layer_smaps()
-    #. enlarge each layer saliency maps to the image size
-        * self._enlarge_layer_smaps()
     #. merge enlarged layer saliency maps over layers
         * and then, the final saliency map is created
-        * self._merge_enlarged_smaps()
+        * self._merge_layer_smaps()
 
     The final saliency map also be able to call "Heatmap"
     that represents which regions the CNN model pays attention (or doesn't)
@@ -60,6 +59,9 @@ class BaseCAM(CNN, ABC):
             if True, do backward and retrive gradient(s).
         blur_image (bool):
             create a blurred image to stabilize the saliency map.
+        channel_weight (Optional[str]):
+            how to create weight for each channels.
+        n_channels (Optional[int]): the number of channels calc score.
     """
 
     def __init__(
@@ -68,11 +70,15 @@ class BaseCAM(CNN, ABC):
         target: TargetLayer,
         requires_grad: bool = False,
         blur_image: bool = False,
+        channel_weight: Optional[str] = None,
+        n_channels: Optional[int] = None,
     ) -> None:
         super().__init__(target=target, **resource)
         # store flags
         self.requires_grad: bool = requires_grad
         self.blur_image: bool = blur_image
+        self.channel_weight: Optional[str] = channel_weight
+        self.n_channels: Optional[int] = n_channels
         # caches created in self._forward()
         self.raw_image: Optional[Image] = None
         self.image: Optional[Tensor] = None
@@ -150,10 +156,12 @@ class BaseCAM(CNN, ABC):
             rank (Optional[int]): the rank of the target class.
             label (Optional[int]): the label of the target class.
         """
+        # if image and requires_grad are not indicated, use default one
         if image is None:
             image = self.image
         if requires_grad is None:
             requires_grad = self.requires_grad
+        # check indicated rank and label
         if self.target_class is None:
             if rank is None and label is None:
                 rank = 0
@@ -219,11 +227,28 @@ class BaseCAM(CNN, ABC):
         weights.finalize()
         return weights
 
+    def _extract_class_weights(self: BaseCAM) -> Weights:
+        """extract weights of the target class from self.class_weight.
+
+        If this function is used, the target of Conv. Layer must be the "last".
+
+        Returns:
+            Weights: the weight of the target class.
+        """
+        weights: Weights = Weights()
+        weights.append(
+            self.class_weight[[self.target_class], :].view(
+                1, self.class_weight.size()[1], 1, 1
+            )
+        )
+        weights.finalize()
+        return weights
+
     def _create_channel_smaps(
         self: BaseCAM,
         weights: Weights,
     ) -> SaliencyMaps:
-        """weight activations.
+        """multiply activations with weights and enlarge them to the image size.
         (weighted activations = channel saliency maps)
 
         Args:
@@ -235,7 +260,14 @@ class BaseCAM(CNN, ABC):
         channel_saliencies: SaliencyMaps = SaliencyMaps()
         assert len(weights) == len(self.activations)
         for (weight, _), (activation, _) in zip(weights, self.activations):
-            channel_saliencies.append(weight * activation)
+            channel_saliencies.append(
+                F.interpolate(
+                    weight * activation,
+                    size=(self.height, self.width),
+                    mode="bilinear",
+                    align_corners=False,
+                )
+            )
         channel_saliencies.finalize()
         return channel_saliencies
 
@@ -243,49 +275,131 @@ class BaseCAM(CNN, ABC):
         self: BaseCAM,
         smap: Tensor,
     ) -> Tensor:
-        """calc weight of channels using SVD (Singular Value Decomposition).
+        """calc a weight for each channels using SVD
+        (Singular Value Decomposition).
 
         Args:
-            smap (Tensor): saliency map to calc weight.
+            smap (Tensor): the saliency map to calc weight.
 
         Returns:
-            Tensor: the weight.
+            Tensor: the weight of channels.
         """
-        b, k, u, v = smap.size()
-        assert b == 1
+        assert batch_size(smap) == 1
+        k = channel_size(smap)
+        if k == 1:
+            return torch.tensor([1.0]).view(1, 1, 1, 1).to(self.device)
         # create channel (k) x position (u x v) matrix
         CP: Tensor = smap.view(k, -1)
         # standarize
         CP_std: Tensor = (CP - CP.mean()) / CP.std()
         # SVD (singular value decomposition)
         Ch, SS, _ = torch.linalg.svd(CP_std, full_matrices=False)
-        Ch = Ch.real
-        # get first channel vector
-        weight: Tensor = Ch[:, [SS.argmax()]]
-        if weight.sum() < 0:
+        # get the first eigenvector of the channel feature matrix and normalize
+        weight: Tensor = F.normalize(Ch.real[:, [SS.argmax()]], dim=0).view(
+            1, k, 1, 1
+        )
+        # the eigen-vector may have the opposite sign
+        if (weight * F.relu(smap)).sum() < 0:
             weight = -weight
-        # normalize
-        if weight.sum().abs() > self.eps:
-            weight /= weight.sum()
+        return weight.view(1, k, 1, 1)
+
+    def _calc_score_weight(
+        self: BaseCAM,
+        smap: Tensor,
+        n_channels: Optional[int],
+    ) -> Tensor:
+        """calc a weight for each channels using SVD
+        (Singular Value Decomposition).
+
+        Args:
+            smap (Tensor): the saliency map to calc weight.
+            n_channels (Optional[int]): the number of channels calc score.
+
+        Returns:
+            Tensor: the weight of channels.
+        """
+        assert batch_size(smap) == 1
+        k = channel_size(smap)
+        if k == 1:
+            return torch.tensor([1.0]).view(1, 1, 1, 1).to(self.device)
+        if n_channels is None:
+            n_channels = -1
+        orig_score: float = self.score
+        dict_smaps: List[Dict] = list()
+        for i in range(k):
+            # extract i-th channel from channel saliency map
+            raw_smap: Tensor = smap.clone().detach()[:, [i], :, :]
+            # normalize
+            smax: float = raw_smap.max().cpu().numpy().ravel()[0]
+            smin: float = raw_smap.min().cpu().numpy().ravel()[0]
+            sdif: float = smax - smin
+            if sdif < self.eps:
+                continue
+            normed_smap: Tensor = (raw_smap - smin) / sdif
+            # stack maps
+            dict_smaps.append(
+                {
+                    "channel": i,
+                    "key": sdif,
+                    "raw": raw_smap,
+                    "norm": normed_smap,
+                }
+            )
+        if n_channels > 0:
+            dict_smaps = sorted(
+                dict_smaps, key=lambda x: x["key"], reverse=True
+            )[:n_channels]
+        # calc score and weights
+        weights: List[float] = list()
+        for dict_smap in dict_smaps:
+            # create feature emphasized image
+            mapped_image: Tensor = dict_smap["norm"] * self.image
+            if self.blur_image:
+                mapped_image += (1.0 - dict_smap["norm"]) * self.blurred_image
+            # forward network
+            self._forward_net(image=self.image * dict_smap["norm"])
+            weights.append(self.score - orig_score)
+        # normalize weights (softmax)
+        normed_weight: Tensor = F.softmax(
+            torch.tensor(weights).to(self.device), dim=0
+        )
+        # create final weights
+        weight: Tensor
+        if n_channels > 0:
+            idx: Tensor = torch.tensor([x["channel"] for x in dict_smaps]).to(
+                self.device
+            )
+            weight = torch.zeros(k).scatter(
+                dim=0, index=idx, src=normed_weight
+            )
+        else:
+            weight = normed_weight
+        # restore the score
+        self.score = orig_score
         return weight.view(1, k, 1, 1)
 
     def _create_layer_smaps(
         self: BaseCAM,
         channel_smaps: SaliencyMaps,
-        eigen_weight: bool,
+        channel_weight: Optional[str],
+        n_channels: Optional[int],
     ) -> SaliencyMaps:
         """merge channel saliency maps over channels.
         (merged saliency maps = layer saliency maps)
 
         Args:
             channel_smaps (SaliencyMaps): channel saliency maps.
-            eigen_weight (bool):
-                if True, weighted activation(s) are further weighted
-                by the first eigenvector of decomposed matrix by SVD.
+            channel_weight (Optional[str]):
+                how to create weight for each channels.
+            n_channels (Optional[int]): the number of channels calc score.
 
         Returns:
             SaliencyMaps: layer saliency maps.
         """
+        if self.channel_weight is not None:
+            channel_weight = self.channel_weight
+        if self.n_channels is not None:
+            n_channels = n_channels
         layer_smaps: SaliencyMaps = SaliencyMaps(is_layer=True)
         for channel_smap, (b, k, _, _) in channel_smaps:
             assert b == 1
@@ -293,56 +407,40 @@ class BaseCAM(CNN, ABC):
                 # saliency map is already created
                 layer_smaps.append(channel_smap)
                 continue
-            if eigen_weight:
-                # calc weight for channels using SVD
-                weight: Tensor = self._calc_eigen_weight(smap=channel_smap)
-                # weight channel smap and sum over channels
-                layer_smaps.append(
-                    (weight * channel_smap).sum(dim=1, keepdim=True)
-                )
-            else:
+            if channel_weight not in ["eigen", "score"]:
                 # average over channels
-                layer_smaps.append(channel_smap.mean(dim=1, keepdim=True))
+                layer_smaps.append(
+                    F.relu(channel_smap).mean(dim=1, keepdim=True)
+                    - F.relu(-channel_smap).mean(dim=1, keepdim=True)
+                )
+                continue
+            weight: Tensor
+            if channel_weight == "eigen":
+                # calc weight for channels using SVD
+                weight = self._calc_eigen_weight(
+                    smap=channel_smap,
+                )
+            else:  # channel_weight == "score"
+                # calc weight for channels by calc scores
+                weight = self._calc_score_weight(
+                    smap=channel_smap,
+                    n_channels=n_channels,
+                )
+            # weight channel saliency map
+            channel_smap *= weight
+            # sum over channels
+            layer_smaps.append(
+                F.relu(channel_smap).sum(dim=1, keepdim=True)
+                - F.relu(-channel_smap).sum(dim=1, keepdim=True)
+            )
         layer_smaps.finalize()
         return layer_smaps
 
-    def _enlarge_layer_smaps(
+    def _merge_layer_smaps(
         self: BaseCAM,
         layer_smaps: SaliencyMaps,
-    ) -> SaliencyMaps:
-        """enlarge each layer saliency map to image size.
-
-        Args:
-            layer_smaps (SaliencyMaps): layer saliency maps.
-
-        Returns:
-            SaliencyMaps: enlarged layer saliency maps.
-        """
-        assert len(layer_smaps) > 0
-        enlarged_smaps: SaliencyMaps = SaliencyMaps(is_layer=True)
-        for layer_smap, (b, k, u, v) in layer_smaps:
-            assert b == 1 and k == 1
-            if u == self.height and v == self.width:
-                # already enlarged
-                enlarged_smaps.append(layer_smap)
-                continue
-            # forcibly enlarge merged saliency map to image size
-            enlarged_smaps.append(
-                F.interpolate(
-                    layer_smap,
-                    size=(self.height, self.width),
-                    mode="bilinear",
-                    align_corners=False,
-                )
-            )
-        enlarged_smaps.finalize()
-        return enlarged_smaps
-
-    def _merge_enlarged_smaps(
-        self: BaseCAM,
-        enlarged_smaps: SaliencyMaps,
     ) -> np.ndarray:
-        """merge enlarged layer saliency maps and conver it to heatmap.
+        """merge layer saliency maps and conver it to heatmap.
 
         Args:
             saliency_maps (List[Tensor]): saliency_map(s).
@@ -350,12 +448,12 @@ class BaseCAM(CNN, ABC):
         Returns:
             np.ndarray: heatmap.
         """
-        assert len(enlarged_smaps) > 0
+        assert len(layer_smaps) > 0
+        stacked: Tensor = torch.stack([x[0] for x in layer_smaps], dim=0)
         return (
-            torch.stack([x[0] for x in enlarged_smaps], dim=0)
-            .sum(dim=0)
-            .detach()
+            (F.relu(stacked).sum(dim=0) - F.relu(-stacked).sum(dim=0))
             .squeeze()
+            .detach()
             .cpu()
             .numpy()
         )
@@ -416,7 +514,8 @@ class BaseCAM(CNN, ABC):
         path: str,
         rank: Optional[int] = None,
         label: Optional[int] = None,
-        eigen_weight: bool = False,
+        channel_weight: Optional[str] = None,
+        n_channels: Optional[int] = None,
         draw_negative: bool = False,
         fig: Optional[mpl.figure.Figure] = None,
         ax: Optional[mpl.axes.Axes] = None,
@@ -439,12 +538,11 @@ class BaseCAM(CNN, ABC):
         self._create_image(path=path)
         self._forward(rank=rank, label=label)
         self._draw_image(
-            heatmap=self._merge_enlarged_smaps(
-                self._enlarge_layer_smaps(
-                    self._create_layer_smaps(
-                        self._create_channel_smaps(self._create_weights()),
-                        eigen_weight=eigen_weight,
-                    )
+            heatmap=self._merge_layer_smaps(
+                self._create_layer_smaps(
+                    self._create_channel_smaps(self._create_weights()),
+                    channel_weight=channel_weight,
+                    n_channels=n_channels,
                 )
             ),
             draw_negative=draw_negative,

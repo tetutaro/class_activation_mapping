@@ -34,12 +34,4 @@ class VanillaCAM(BaseCAM):
         return
 
     def _create_weights(self: VanillaCAM) -> Weights:
-        assert len(self.activations) == 1
-        weights: Weights = Weights()
-        weights.append(
-            self.class_weight[[self.target_class], :].view(
-                1, self.class_weight.size()[1], 1, 1
-            )
-        )
-        weights.finalize()
-        return weights
+        return self._extract_class_weights()

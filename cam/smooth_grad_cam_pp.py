@@ -71,7 +71,7 @@ class SmoothGradCAMpp(BaseCAM):
             ):
                 # calc alpha (like Grad-CAM++)
                 alpha_numer: Tensor = gradient.pow(2.0)
-                alpha_denom: Tensor = 2.0 * alpha_numer.clone()
+                alpha_denom: Tensor = 2.0 * alpha_numer
                 alpha_denom += (
                     (gradient.pow(3.0) * activation)
                     .view(1, k, -1)
