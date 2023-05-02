@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 from __future__ import annotations
+from typing import Any
 
 from cam.base_cam import BaseCAM
 from cam.libs_cam import ResourceCNN, TargetLayer, Weights
@@ -28,8 +29,8 @@ class DummyCAM(BaseCAM):
         return
 
     def _set_name(self: DummyCAM) -> None:
-        self.name = "Dummy-CAM"
+        self.name_ = "Dummy-CAM"
         return
 
-    def _create_weights(self: DummyCAM) -> Weights:
-        return self._create_dummy_weights()
+    def _create_weights(self: DummyCAM, **kwargs: Any) -> Weights:
+        return self._dummy_weights()

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 from __future__ import annotations
+from typing import Any
 
 from cam.base_cam import BaseCAM
-from cam.libs_cam import ResourceCNN, TargetLayer, Weights
+from cam.libs_cam import ResourceCNN, Weights
 
 
 class VanillaCAM(BaseCAM):
@@ -21,17 +22,15 @@ class VanillaCAM(BaseCAM):
     def __init__(
         self: VanillaCAM,
         resource: ResourceCNN,
-        target: TargetLayer = "last",
     ) -> None:
-        self._assert_target_is_last(target=target)
         super().__init__(
             resource=resource,
-            target=target,
+            target="last",
         )
 
     def _set_name(self: VanillaCAM) -> None:
-        self.name = "CAM"
+        self.name_ = "CAM"
         return
 
-    def _create_weights(self: VanillaCAM) -> Weights:
-        return self._extract_class_weights()
+    def _create_weights(self: VanillaCAM, **kwargs: Any) -> Weights:
+        return self._class_weights()

@@ -53,17 +53,17 @@ class LimeImage(CNN):
         # load image
         images: np.ndarray = np.array(Image.open(path))[np.newaxis, :]
         # predict labels
-        self.top_labels: int = top_labels
+        self.top_labels_: int = top_labels
         self._predict_labels(images=images)
         # create explanation
         explainer: LimeImageExplainer = LimeImageExplainer(
             random_state=random_state
         )
-        self.explain: ImageExplanation = explainer.explain_instance(
+        self.explain_: ImageExplanation = explainer.explain_instance(
             image=images[0],
             classifier_fn=self._predict,
-            labels=self.labels,
-            top_labels=self.top_labels,
+            labels=self.labels_,
+            top_labels=self.top_labels_,
             num_features=num_features,
             num_samples=num_samples,
             hide_color=0,
@@ -81,11 +81,11 @@ class LimeImage(CNN):
             np.ndarray: scores for each labels.
         """
         return (
-            self.net.forward(
+            self.net_.forward(
                 torch.stack(
-                    [self.transform(Image.fromarray(img)) for img in images],
+                    [self.transform_(Image.fromarray(img)) for img in images],
                     dim=0,
-                ).to(self.device)
+                ).to(self.device_)
             )
             .softmax(dim=1)
             .detach()
@@ -101,30 +101,30 @@ class LimeImage(CNN):
         """
         scores: np.ndarray = self._predict(images=images)
         ranks: np.ndarray = np.argsort(scores)[:, ::-1]
-        self.preds: List[PredLabel] = list()
-        self.pred_labels: List[int] = list()
-        for i, label in enumerate(ranks[0, : self.top_labels]):
-            self.preds.append(
+        self.preds_: List[PredLabel] = list()
+        self.pred_labels_: List[int] = list()
+        for i, label in enumerate(ranks[0, : self.top_labels_]):
+            self.preds_.append(
                 PredLabel(
                     label=label,
-                    name=self.labels[label],
+                    name=self.labels_[label],
                     rank=i,
                     score=scores[0, label],
                 )
             )
-            self.pred_labels.append(label)
+            self.pred_labels_.append(label)
         return
 
     def show_labels(self: LimeImage) -> None:
         """print predicted labels"""
-        show_text("\n".join([str(pred) for pred in self.preds]))
+        show_text("\n".join([str(pred) for pred in self.preds_]))
         return
 
     def draw_boundary(self: LimeImage) -> None:
         """draw boundary"""
         draw_image_boundary(
-            image=self.explain.image,
-            boundary=self.explain.segments,
+            image=self.explain_.image,
+            boundary=self.explain_.segments,
             title="Segment Boundary",
         )
         return
@@ -150,18 +150,18 @@ class LimeImage(CNN):
         """
         if rank is None and label is None:
             rank = 0
-        if rank is not None and rank >= self.top_labels:
+        if rank is not None and rank >= self.top_labels_:
             raise ValueError(
                 f"rank must be less than top_labels ({self.top_labels})"
             )
-        if label is not None and label not in self.pred_labels:
+        if label is not None and label not in self.pred_labels_:
             raise ValueError(f"label ({label}) is not predicted")
         if label is not None:
-            rank = self.pred_labels.index(label)
+            rank = self.pred_labels_.index(label)
         # create heatmap
         heatmap: np.ndarray = np.vectorize(
-            dict(self.explain.local_exp[self.explain.top_labels[rank]]).get
-        )(self.explain.segments)
+            dict(self.explain_.local_exp[self.explain_.top_labels[rank]]).get
+        )(self.explain_.segments)
         # normalize heatmap
         heatmap /= heatmap.max()
         if draw_negative:
@@ -171,10 +171,10 @@ class LimeImage(CNN):
         # create title
         title: str = "LIME"
         if fig is None or ax is None:
-            title += f" ({self.labels[self.explain.top_labels[rank]]})"
+            title += f" ({self.labels_[self.explain_.top_labels[rank]]})"
         # draw
         draw_image_heatmap(
-            image=self.explain.image,
+            image=self.explain_.image,
             heatmap=heatmap,
             title=title,
             draw_negative=draw_negative,

@@ -8,6 +8,8 @@ from cam.vanilla_cam import VanillaCAM
 from cam.grad_cam import GradCAM
 from cam.grad_cam_pp import GradCAMpp
 from cam.smooth_grad_cam_pp import SmoothGradCAMpp
+from cam.score_cam import ScoreCAM
+from cam.ablation_cam import AblationCAM
 
 __all__ = [
     "__version__",
@@ -17,4 +19,6 @@ __all__ = [
     "GradCAM",
     "GradCAMpp",
     "SmoothGradCAMpp",
+    "ScoreCAM",
+    "AblationCAM",
 ]

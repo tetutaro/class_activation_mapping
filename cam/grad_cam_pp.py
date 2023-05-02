@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 from __future__ import annotations
-
-import numpy as np
-import torch
-from torch import Tensor
+from typing import Any
 
 from cam.base_cam import BaseCAM
 from cam.libs_cam import ResourceCNN, TargetLayer, Weights
@@ -35,37 +32,8 @@ class GradCAMpp(BaseCAM):
         return
 
     def _set_name(self: GradCAMpp) -> None:
-        self.name = "Grad-CAM++"
+        self.name_ = "Grad-CAM++"
         return
 
-    def _create_weights(self: GradCAMpp) -> Weights:
-        weights: Weights = Weights()
-        for (activation, (_, k, _, _)), (gradient, _) in zip(
-            self.activations, self.gradients
-        ):
-            # calc alpha (the eq (19) in the paper)
-            alpha_numer: Tensor = gradient.pow(2.0)
-            alpha_denom: Tensor = 2.0 * alpha_numer
-            alpha_denom += (
-                (gradient.pow(3.0) * activation)
-                .view(1, k, -1)
-                .sum(dim=2)
-                .view(1, k, 1, 1)
-            )
-            alpha_denom = (
-                torch.where(
-                    alpha_denom != 0.0,
-                    alpha_denom,
-                    torch.ones_like(alpha_denom),
-                )
-                + self.eps
-            )  # for stability
-            alpha: Tensor = alpha_numer / alpha_denom
-            weights.append(
-                (np.exp(self.score) * alpha * gradient)
-                .view(1, k, -1)
-                .sum(dim=2)
-                .view(1, k, 1, 1)
-            )
-        weights.finalize()
-        return weights
+    def _create_weights(self: GradCAMpp, **kwargs: Any) -> Weights:
+        return self._grad_pp_weights()

@@ -15,6 +15,7 @@ from torch import Tensor
 from torchvision.models._api import WeightsEnum
 
 from cam.libs_cam import TargetLayer, Activations, Gradients, Weights
+from cam.libs_cam import channel_size
 from cam.utils import show_table
 
 
@@ -100,28 +101,28 @@ class CNN(ABC):
         weights: WeightsEnum,
     ) -> None:
         # device
-        self.device: str = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device_: str = "cuda" if torch.cuda.is_available() else "cpu"
         # network
-        self.net_weight: WeightsEnum = weights
-        self.transform: Callable = self.net_weight.transforms()
-        self.net: nn.Module = (
-            net(weights=self.net_weight).to(self.device).eval()
+        self.net_weights_: WeightsEnum = weights
+        self.transform_: Callable = self.net_weights_.transforms()
+        self.net_: nn.Module = (
+            net(weights=self.net_weights_).to(self.device_).eval()
         )
-        self.softmax: nn.Softmax = nn.Softmax(dim=1)
+        self.softmax_: nn.Softmax = nn.Softmax(dim=1)
         # labels
-        self.labels: List[str] = self.net_weight.meta["categories"]
+        self.labels_: List[str] = self.net_weights_.meta["categories"]
         # caches
-        self.init_activations: Weights = Weights()
-        self.activations: Activations = Activations()
-        self.gradients: Gradients = Gradients()
+        self.init_activations_: Weights = Weights()
+        self.activations_: Activations = Activations()
+        self.gradients_: Gradients = Gradients()
         # hook functions to Conv. Layer(s)
-        self.handles: List[RemovableHandle] = list()
-        self.conv_layers: List[str] = list()
+        self.handles_: List[RemovableHandle] = list()
+        self.conv_layers_: List[str] = list()
         self._get_conv_layers()
         self._hook_target_layer(target=target)
         # weight of the classifier block in CNN
-        self.class_weight: Tensor
-        self._create_class_weight()
+        self.class_weights_: Tensor
+        self._create_class_weights()
         return
 
     def _get_init_activation(
@@ -139,7 +140,7 @@ class CNN(ABC):
             actv_input (Tuple[Tensor]): forward input of the Layer.
             actv_output (Tensor): forward output of the Layer (activation).
         """
-        self.init_activations.append(weight=actv_output.clone().detach())
+        self.init_activations_.append(weight=actv_output.clone().detach())
         return
 
     def _get_activation(
@@ -157,7 +158,7 @@ class CNN(ABC):
             actv_input (Tuple[Tensor]): forward input of the Layer.
             actv_output (Tensor): forward output of the Layer (activation).
         """
-        self.activations.append(output=actv_output)
+        self.activations_.append(output=actv_output)
         return
 
     def _get_gradient(
@@ -175,7 +176,7 @@ class CNN(ABC):
             grad_input (Tuple[Tensor]): backward input of the Layer.
             grad_output (Tensor): backward output of the Layer (gradient).
         """
-        self.gradients.append(output=grad_output[0])
+        self.gradients_.append(output=grad_output[0])
         return
 
     def _hook_by_name(
@@ -193,15 +194,15 @@ class CNN(ABC):
                 modname += f".{n}"
         cmnd: str
         if forward_fn is not None:
-            cmnd = f"""self.handles.append(
-                self.net.features{modname}.register_forward_hook(
+            cmnd = f"""self.handles_.append(
+                self.net_.features{modname}.register_forward_hook(
                     {forward_fn}
                 )
             )"""
             exec(cmnd)
         if backward_fn is not None:
-            cmnd = f"""self.handles.append(
-                self.net.features{modname}.register_full_backward_hook(
+            cmnd = f"""self.handles_.append(
+                self.net_.features{modname}.register_full_backward_hook(
                     {backward_fn}
                 )
             )"""
@@ -210,9 +211,9 @@ class CNN(ABC):
 
     def _delete_handles(self: CNN) -> None:
         """remove all hooked handles"""
-        for handler in self.handles:
+        for handler in self.handles_:
             handler.remove()
-        self.handles = list()
+        self.handles_ = list()
         return
 
     def _get_conv_layers(self: CNN) -> None:
@@ -221,12 +222,12 @@ class CNN(ABC):
         """
         # clear cache
         self._delete_handles()
-        self.init_activations.clear()
-        self.conv_layers = list()
+        self.init_activations_.clear()
+        self.conv_layers_ = list()
         # get names of all Conv. Layer
         info_conv_layers: Dict[int, Dict] = dict()
         all_conv_layers: DefaultDict[List] = defaultdict(list)
-        for module in self.net.features.named_modules():
+        for module in self.net_.features.named_modules():
             if isinstance(module[1], nn.ReLU):
                 # https://github.com/frgfm/torch-cam/issues/72
                 module[1].inplace = False
@@ -253,20 +254,20 @@ class CNN(ABC):
             )
         # create dummy (black) image
         dummy: Tensor = (
-            self.transform(
+            self.transform_(
                 Image.fromarray(np.zeros((256, 256, 3), dtype=np.uint8))
             )
             .unsqueeze(0)
-            .to(self.device)
+            .to(self.device_)
         )
         # forward network and get gradients of hooked Conv. Layers
         with torch.no_grad():
-            _ = self.net.forward(dummy)
-        assert len(self.init_activations) == len(info_conv_layers)
+            _ = self.net_.forward(dummy)
+        assert len(self.init_activations_) == len(info_conv_layers)
         # distribute blocks according to its shape of activation
         shape_dict: DefaultDict[List] = defaultdict(list)
         for (_, shape), block in zip(
-            self.init_activations, sorted(info_conv_layers.keys())
+            self.init_activations_, sorted(info_conv_layers.keys())
         ):
             info_conv_layers[block]["shape"] = "x".join(
                 [str(s) for s in shape]
@@ -283,20 +284,20 @@ class CNN(ABC):
                     info_conv_layers[block]["offset"] = ""
             last_blocks.append(max_block)
         for i, block in enumerate(sorted(last_blocks)):
-            self.conv_layers.append(info_conv_layers[block]["name"])
+            self.conv_layers_.append(info_conv_layers[block]["name"])
             info_conv_layers[block]["offset"] = str(i)
-        self.info_conv_layers: pd.DataFrame = (
+        self.info_conv_layers_: pd.DataFrame = (
             pd.DataFrame(info_conv_layers.values())
             .sort_values(by="block", ignore_index=True)
             .loc[:, ["block", "shape", "is_last", "offset", "name"]]
         )
         # clear cache
         self._delete_handles()
-        self.init_activations.clear()
+        self.init_activations_.clear()
         return
 
     def show_conv_layers(self: CNN) -> None:
-        show_table(df=self.info_conv_layers, index=False)
+        show_table(df=self.info_conv_layers_, index=False)
         return
 
     def _hook_target_layer(self: CNN, target: TargetLayer) -> None:
@@ -305,14 +306,14 @@ class CNN(ABC):
         target_layers: List[str] = list()
         if isinstance(target, str):
             if target == "last":
-                target_layers.append(self.conv_layers[-1])
+                target_layers.append(self.conv_layers_[-1])
             elif target == "all":
-                target_layers = self.conv_layers[:]
+                target_layers = self.conv_layers_[:]
             else:
                 raise ValueError(f"target is invalid text: {target}")
         elif isinstance(target, int):
             try:
-                target_layers.append(self.conv_layers[target])
+                target_layers.append(self.conv_layers_[target])
             except Exception:
                 raise ValueError(f"target is invalid value: {target}")
         elif isinstance(target, list):
@@ -330,7 +331,21 @@ class CNN(ABC):
             )
         return
 
-    def _create_class_weight(self: CNN) -> None:
+    def _get_avgpool_size(self: CNN) -> int:
+        """calc the output size of the avgpool part.
+
+        Returns:
+            int: the size of the avgpool part.
+        """
+        avgpool_size: int = 1
+        if isinstance(self.net_.avgpool.output_size, int):
+            avgpool_size = self.net_.avgpool.output_size
+        else:
+            for size in self.net_.avgpool.output_size:
+                avgpool_size *= size
+        return avgpool_size
+
+    def _create_class_weights(self: CNN) -> None:
         """calc the weight of Linear Layer of the classifier part."""
         # if the classifier part of the CNN model has multiple Linear Layers,
         # multiply them all.
@@ -338,45 +353,41 @@ class CNN(ABC):
         # n_channels is the number of channels of the last Conv. Layer.
         # n_labels is the number of labels to predict.
         cweight: Optional[Tensor] = None
-        for module in self.net.classifier.named_modules():
+        for module in self.net_.classifier.named_modules():
             if isinstance(module[1], nn.modules.linear.Linear):
                 for param in module[1].named_parameters():
                     if param[0] == "weight":
                         weight: Tensor = (
-                            param[1].data.clone().detach().to(self.device)
+                            param[1].data.clone().detach().to(self.device_)
                         )
                         if cweight is None:
                             cweight = weight
                         else:
                             cweight = weight @ cweight
-        # calc the output size of the avgpool par
-        avgpool_size: int = 1
-        if isinstance(self.net.avgpool.output_size, int):
-            avgpool_size = self.net.avgpool.output_size
-        else:
-            for size in self.net.avgpool.output_size:
-                avgpool_size *= size
+        # get the output size of the avgpool part
+        avgpool_size: int = self._get_avgpool_size()
         if avgpool_size == 1:
-            self.class_weight = cweight
+            self.class_weights_ = cweight
             return
         # if avgpool_size > 0, the output of the feature part of the CNN model
         # is not aggregated to one value by channels of the last Conv. Layer.
         # so calc average of the weight per the kernel size of avgpool block.
         cweights: List[Tensor] = list()
-        assert cweight.size()[1] % avgpool_size == 0
-        for i in range(cweight.size()[1] // avgpool_size):
+        k: int = channel_size(cweight)
+        assert k % avgpool_size == 0
+        for i in range(k // avgpool_size):
             cweights.append(
                 cweight[:, i * avgpool_size : (i + 1) * avgpool_size].mean(
                     dim=1, keepdim=True
                 )
             )
-        self.class_weight = torch.stack(cweights, dim=1).squeeze(2)
+        self.class_weights_ = torch.stack(cweights, dim=1).squeeze(2)
         return
 
     def _clear_cache(self: CNN) -> None:
         """clear all caches."""
-        self.activations.clear()
-        self.gradients.clear()
+        self.activations_.clear()
+        self.gradients_.clear()
         return
 
     def _forward_net(self: CNN, image: Tensor) -> Tensor:
@@ -388,7 +399,7 @@ class CNN(ABC):
         Returns:
             Tensor: the scores for each class. (not normalized)
         """
-        return self.softmax(self.net.forward(image))
+        return self.softmax_(self.net_.forward(image))
 
     def _forward_classifier(self: CNN, activation: Tensor) -> Tensor:
         """forward the activation of the last Conv. Layer
@@ -401,7 +412,7 @@ class CNN(ABC):
         Returns:
             Tensor: the scores for each class. (not normalized)
         """
-        return self.softmax(self.net.forward_classifier(activation))
+        return self.softmax_(self.net_.forward_classifier(activation))
 
     def __delete__(self: CNN) -> None:
         self._delete_handles()

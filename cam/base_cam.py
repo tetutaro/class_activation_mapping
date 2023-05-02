@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 from __future__ import annotations
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -61,7 +61,6 @@ class BaseCAM(CNN, ABC):
             create a blurred image to stabilize the saliency map.
         channel_weight (Optional[str]):
             how to create weight for each channels.
-        n_channels (Optional[int]): the number of channels calc score.
     """
 
     def __init__(
@@ -71,46 +70,32 @@ class BaseCAM(CNN, ABC):
         requires_grad: bool = False,
         blur_image: bool = False,
         channel_weight: Optional[str] = None,
-        n_channels: Optional[int] = None,
     ) -> None:
         super().__init__(target=target, **resource)
         # store flags
-        self.requires_grad: bool = requires_grad
-        self.blur_image: bool = blur_image
-        self.channel_weight: Optional[str] = channel_weight
-        self.n_channels: Optional[int] = n_channels
+        self.requires_grad_: bool = requires_grad
+        self.blur_image_: bool = blur_image
+        self.channel_weight_: Optional[str] = channel_weight
         # caches created in self._forward()
-        self.raw_image: Optional[Image] = None
-        self.image: Optional[Tensor] = None
-        self.blurred_image: Optional[Tensor] = None
-        self.width: Optional[int] = None
-        self.height: Optional[int] = None
-        self.target_class: Optional[int] = None
-        self.score: Optional[float] = None
+        self.raw_image_: Optional[Image] = None
+        self.image_: Optional[Tensor] = None
+        self.blurred_image_: Optional[Tensor] = None
+        self.width_: Optional[int] = None
+        self.height_: Optional[int] = None
+        self.target_class_: Optional[int] = None
+        self.score_: Optional[float] = None
         # constants
-        self.eps = 1e-6
+        self.eps_ = 1e-6
         # the name of CAM model
-        self.name: str
+        self.name_: str
         self._set_name()
         return
 
     @abstractmethod
     def _set_name(self: BaseCAM) -> None:
         """set the name of CAM model for the title of the output image."""
-        self.name = ""
+        self.name_ = ""
         return
-
-    def _assert_target_is_last(self: BaseCAM, target: TargetLayer) -> None:
-        if isinstance(target, str):
-            if target == "last":
-                return
-        elif isinstance(target, int):
-            if target == -1:
-                return
-        elif isinstance(target, list):
-            if len(target) == 1 and target[0] == -1:
-                return
-        raise ValueError(f'target must be "last": {target}')
 
     def _create_image(
         self: BaseCAM,
@@ -122,16 +107,16 @@ class BaseCAM(CNN, ABC):
             path (str): the pathname of the original image.
         """
         # load the original image
-        self.raw_image = Image.open(path)
-        self.width, self.height = self.raw_image.size
-        self.image = (
-            self.transform(self.raw_image).unsqueeze(0).to(self.device)
+        self.raw_image_ = Image.open(path)
+        self.width_, self.height_ = self.raw_image_.size
+        self.image_ = (
+            self.transform_(self.raw_image_).unsqueeze(0).to(self.device_)
         )
         # create the blurred image
-        if self.blur_image:
-            self.blurred_image: Tensor = (
-                self.transform(
-                    self.raw_image.filter(
+        if self.blur_image_:
+            self.blurred_image_: Tensor = (
+                self.transform_(
+                    self.raw_image_.filter(
                         filter=ImageFilter.GaussianBlur(radius=51)
                     )
                 )
@@ -153,16 +138,18 @@ class BaseCAM(CNN, ABC):
         If both rank and label are not specified, set rank to 0.
 
         Args:
+            image (Optional[Tensor]): the image to forward the network.
+            requires_grad (Optional[bool]): gradients are needed.
             rank (Optional[int]): the rank of the target class.
             label (Optional[int]): the label of the target class.
         """
-        # if image and requires_grad are not indicated, use default one
+        # check indicated image and requires_grad
         if image is None:
-            image = self.image
+            image = self.image_
         if requires_grad is None:
-            requires_grad = self.requires_grad
+            requires_grad = self.requires_grad_
         # check indicated rank and label
-        if self.target_class is None:
+        if self.target_class_ is None:
             if rank is None and label is None:
                 rank = 0
             if (rank is not None and rank >= 1000) or (
@@ -170,20 +157,20 @@ class BaseCAM(CNN, ABC):
             ):
                 raise ValueError("rank and label must be less than 1000")
         # clear activations and gradients
-        self.activations.clear()
-        self.gradients.clear()
+        self.activations_.clear()
+        self.gradients_.clear()
         # forward the image to the network
         if requires_grad:
-            scores: Tensor = self._forward_net(image=image)
+            scores: Tensor = self._forward_net(image=self.image_)
         else:
             with torch.no_grad():
-                scores: Tensor = self._forward_net(image=image)
+                scores: Tensor = self._forward_net(image=self.image_)
         # decide the target class
-        if self.target_class is None:
+        if self.target_class_ is None:
             if label is not None:
-                self.target_class = label
+                self.target_class_ = label
             else:
-                self.target_class = (
+                self.target_class_ = (
                     scores.clone()
                     .detach()
                     .argsort(dim=1, descending=True)
@@ -192,20 +179,20 @@ class BaseCAM(CNN, ABC):
                     .numpy()[rank]
                 )
         # get the score of target class
-        self.score = (
-            scores.clone().detach().squeeze().cpu().numpy()[self.target_class]
+        self.score_ = (
+            scores.clone().detach().squeeze().cpu().numpy()[self.target_class_]
         )
         # backward the score to the network
         if requires_grad:
-            self.net.zero_grad()
-            scores[:, [self.target_class]].backward(retain_graph=None)
+            self.net_.zero_grad()
+            scores[:, [self.target_class_]].backward(retain_graph=None)
         # finalize activations and gradients
-        self.activations.finalize()
-        self.gradients.finalize()
+        self.activations_.finalize()
+        self.gradients_.finalize()
         return
 
     @abstractmethod
-    def _create_weights(self: BaseCAM) -> Weights:
+    def _create_weights(self: BaseCAM, **kwargs: Any) -> Weights:
         """create the weight.
 
         Returns:
@@ -215,20 +202,20 @@ class BaseCAM(CNN, ABC):
         weights.finalize()
         return weights
 
-    def _create_dummy_weights(self: BaseCAM) -> Weights:
-        """create the dummy weight (each value of weight = 1).
+    def _dummy_weights(self: BaseCAM) -> Weights:
+        """the dummy weights (each value of weight = 1).
 
         Returns:
             Weights: the dummy weight.
         """
         weights: Weights = Weights()
-        for _, (_, k, _, _) in self.activations:
-            weights.append(torch.ones((1, k, 1, 1)).to(self.device))
+        for _, (_, k, _, _) in self.activations_:
+            weights.append(torch.ones((1, k, 1, 1)).to(self.device_))
         weights.finalize()
         return weights
 
-    def _extract_class_weights(self: BaseCAM) -> Weights:
-        """extract weights of the target class from self.class_weight.
+    def _class_weights(self: BaseCAM) -> Weights:
+        """the weights of the target class from self.class_weights_.
 
         If this function is used, the target of Conv. Layer must be the "last".
 
@@ -237,10 +224,65 @@ class BaseCAM(CNN, ABC):
         """
         weights: Weights = Weights()
         weights.append(
-            self.class_weight[[self.target_class], :].view(
-                1, self.class_weight.size()[1], 1, 1
+            self.class_weights_[[self.target_class_], :].view(
+                1, channel_size(self.class_weights_), 1, 1
             )
         )
+        weights.finalize()
+        return weights
+
+    def _grad_weights(self: BaseCAM) -> Weights:
+        """create the weights from gradients.
+
+        weight = average gradient per channel over position.
+
+        Returns:
+            Weights: the weight
+        """
+        weights: Weights = Weights()
+        for gradient, (_, k, _, _) in self.gradients_:
+            weights.append(
+                gradient.view(1, k, -1).mean(dim=2).view(1, k, 1, 1)
+            )
+        weights.finalize()
+        return weights
+
+    def _grad_pp_weights(self: BaseCAM) -> Weights:
+        """create the weights from gradients.
+
+        the weights are calced according to formulae int the Grad-CAM++ paper.
+
+        Returns:
+            Weights: the weight
+        """
+        weights: Weights = Weights()
+        for (activation, (_, k, _, _)), (gradient, _) in zip(
+            self.activations_, self.gradients_
+        ):
+            # calc alpha (the eq (19) in the paper of Grad-CAM++)
+            alpha_numer: Tensor = gradient.pow(2.0)
+            alpha_denom: Tensor = 2.0 * alpha_numer
+            alpha_denom += (
+                (gradient.pow(3.0) * activation)
+                .view(1, k, -1)
+                .sum(dim=2)
+                .view(1, k, 1, 1)
+            )
+            alpha_denom = (
+                torch.where(
+                    alpha_denom != 0.0,
+                    alpha_denom,
+                    torch.ones_like(alpha_denom),
+                )
+                + self.eps_
+            )  # for stability
+            alpha: Tensor = alpha_numer / alpha_denom
+            weights.append(
+                (np.exp(self.score_) * alpha * gradient)
+                .view(1, k, -1)
+                .sum(dim=2)
+                .view(1, k, 1, 1)
+            )
         weights.finalize()
         return weights
 
@@ -258,12 +300,12 @@ class BaseCAM(CNN, ABC):
             SaliencyMaps: channel saliency maps
         """
         channel_saliencies: SaliencyMaps = SaliencyMaps()
-        assert len(weights) == len(self.activations)
-        for (weight, _), (activation, _) in zip(weights, self.activations):
+        assert len(weights) == len(self.activations_)
+        for (weight, _), (activation, _) in zip(weights, self.activations_):
             channel_saliencies.append(
                 F.interpolate(
                     weight * activation,
-                    size=(self.height, self.width),
+                    size=(self.height_, self.width_),
                     mode="bilinear",
                     align_corners=False,
                 )
@@ -273,117 +315,148 @@ class BaseCAM(CNN, ABC):
 
     def _calc_eigen_weight(
         self: BaseCAM,
-        smap: Tensor,
+        salient: Tensor,
     ) -> Tensor:
         """calc a weight for each channels using SVD
         (Singular Value Decomposition).
 
         Args:
-            smap (Tensor): the saliency map to calc weight.
+            salient (Tensor): the saliency map to calc weight.
 
         Returns:
-            Tensor: the weight of channels.
+            Tensor: the weight for each channels.
         """
-        assert batch_size(smap) == 1
-        k = channel_size(smap)
+        assert batch_size(salient) == 1
+        k = channel_size(salient)
         if k == 1:
-            return torch.tensor([1.0]).view(1, 1, 1, 1).to(self.device)
+            return torch.tensor([1.0]).view(1, 1, 1, 1).to(self.device_)
         # create channel (k) x position (u x v) matrix
-        CP: Tensor = smap.view(k, -1)
+        CP: Tensor = salient.view(k, -1)
         # standarize
         CP_std: Tensor = (CP - CP.mean()) / CP.std()
         # SVD (singular value decomposition)
         Ch, SS, _ = torch.linalg.svd(CP_std, full_matrices=False)
-        # get the first eigenvector of the channel feature matrix and normalize
-        weight: Tensor = F.normalize(Ch.real[:, SS.argmax()], dim=0).view(
-            1, k, 1, 1
-        )
+        # retrieve weight vector
+        # * Candidate 1: (the same as the Eigen-CAM paper)
+        #   the first eigen-vector of the channel matrix
+        #     weight: Tensor = Ch.real[:, SS.argmax()]
+        # * Candidate 2: L2-norm of each channel vector
+        #     weight: Tensor = F.normalize(Ch.real, dim=0)
+        # * Candidate 3: projection of each channel vector
+        #   to the first eigen-vector of variance-covariance matrix
+        #   of the channel matrix
+        weight: Tensor = Ch.real[:, SS.argmax()]
+        # normalize weight
+        weight = F.normalize(weight, dim=0).view(1, k, 1, 1)
         # the eigen-vector may have the opposite sign
-        if (weight * F.relu(smap)).sum() < 0:
+        if (weight * F.relu(salient)).sum() < 0:
             weight = -weight
-        return weight.view(1, k, 1, 1)
+        return weight
 
     def _calc_score_weight(
         self: BaseCAM,
-        smap: Tensor,
+        salient: Tensor,
         n_channels: Optional[int],
     ) -> Tensor:
-        """calc a weight for each channels using SVD
-        (Singular Value Decomposition).
+        """calc CIC (Channel-wise Increase of Confidence) scores
+        as a weight for each channels.
+
+        "Abscission" (on the contract with "Ablation")
 
         Args:
-            smap (Tensor): the saliency map to calc weight.
+            salient (Tensor): the saliency map to calc weight.
             n_channels (Optional[int]): the number of channels calc score.
 
         Returns:
-            Tensor: the weight of channels.
+            Tensor: the weight for each channels.
         """
-        assert batch_size(smap) == 1
-        k = channel_size(smap)
+        assert batch_size(salient) == 1
+        k = channel_size(salient)
         if k == 1:
-            return torch.tensor([1.0]).view(1, 1, 1, 1).to(self.device)
+            return torch.tensor([1.0]).view(1, 1, 1, 1).to(self.device_)
         if n_channels is None:
             n_channels = -1
-        orig_score: float = self.score
-        dict_smaps: List[Dict] = list()
+        smap_dicts: List[Dict] = list()
         for i in range(k):
-            # extract i-th channel from channel saliency map
-            raw_smap: Tensor = smap.clone().detach()[:, [i], :, :]
+            # extract i-th channel from the saliency map ("Abscission")
+            smap: Tensor = salient.clone().detach()[:, [i], :, :]
             # normalize
-            smax: float = raw_smap.max().cpu().numpy().ravel()[0]
-            smin: float = raw_smap.min().cpu().numpy().ravel()[0]
+            smax: float = smap.clone().detach().max().cpu().numpy().ravel()[0]
+            smin: float = smap.clone().detach().min().cpu().numpy().ravel()[0]
             sdif: float = smax - smin
-            if sdif < self.eps:
+            if sdif < self.eps_:
                 continue
-            normed_smap: Tensor = (raw_smap - smin) / sdif
-            # stack maps
-            dict_smaps.append(
+            # create smoother mask of the original image
+            # * Candidate 1: (the same as the original paper)
+            #     mask: Tensor = (smap - smin) / sdif
+            # * Candidate 2: (use positive value in smap)
+            #     mask: Tensor = F.relu(smap) / smax
+            # * Candidate 3: (allow negative mask)
+            #     mask: Tensor = (smap / smax).clamp(min=-1.0, max=1.0)
+            mask: Tensor = (smap - smin) / sdif
+            # stack information
+            smap_dicts.append(
                 {
                     "channel": i,
                     "key": sdif,
-                    "raw": raw_smap,
-                    "norm": normed_smap,
+                    "smap": smap,
+                    "mask": mask,
                 }
             )
         if n_channels > 0:
-            dict_smaps = sorted(
-                dict_smaps, key=lambda x: x["key"], reverse=True
+            smap_dicts = sorted(
+                smap_dicts, key=lambda x: x["key"], reverse=True
             )[:n_channels]
-        # calc score and weights
-        weights: List[float] = list()
-        for dict_smap in dict_smaps:
-            # create feature emphasized image
-            mapped_image: Tensor = dict_smap["norm"] * self.image
-            if self.blur_image:
-                mapped_image += (1.0 - dict_smap["norm"]) * self.blurred_image
+        # calc CIC scores
+        cic_scores: List[float] = list()
+        for smap_dict in smap_dicts:
+            # create masked image
+            masked: Tensor = self.image_ * smap_dict["mask"]
+            if self.blur_image_:
+                # SIGCAM
+                masked += self.blurred_image_ * (1.0 - smap_dict["mask"])
             # forward network
-            self._forward(
-                image=self.image * dict_smap["norm"],
-                requires_grad=False,
+            with torch.no_grad():
+                masked_scores: Tensor = self._forward_net(image=masked)
+            masked_score: float = (
+                masked_scores.detach()
+                .squeeze()
+                .cpu()
+                .numpy()[self.target_class_]
             )
-            weights.append(self.score - orig_score)
-        # normalize weight
+            self.activations_.clear()
+            self.gradients_.clear()
+            # calc CIC score
+            # * Candidate 1: (the same as the original paper)
+            #     cic_score: float = masked_score - self.score_
+            # * Candidate 2: (instantaneous slope)
+            #     cic_score: float = (
+            #         (masked_score - self.score_) / (self_score_ + self.eps_)
+            #     )
+            cic_score: float = masked_score - self.score_
+            cic_scores.append(cic_score)
+        # normalize CIC scores
         # The paper of Score-CAM use softmax for normalization.
         # But softmax turns negative values into positive values.
         # For that reason, if the target class is not the first rank,
         # the positive region of saliency map can't show the target.
-        # So, I use normalization with L2-norm instead of softmax.
-        normed_weight: Tensor = F.normalize(
-            torch.tensor(weights).to(self.device), dim=0
+        # So, Here, use normalization with L2-norm instead of softmax.
+        normed_cic_scores: Tensor = F.normalize(
+            torch.tensor(cic_scores).to(self.device_), dim=0
         )
-        # create final weights
+        # create weight
         weight: Tensor
         if n_channels > 0:
-            idx: Tensor = torch.tensor([x["channel"] for x in dict_smaps]).to(
-                self.device
+            idx: Tensor = torch.tensor([x["channel"] for x in smap_dicts]).to(
+                self.device_
             )
-            weight = torch.zeros(k).scatter(
-                dim=0, index=idx, src=normed_weight
+            weight = (
+                torch.zeros(k)
+                .scatter(dim=0, index=idx, src=normed_cic_scores)
+                .to(self.device_)
             )
         else:
-            weight = normed_weight
-        # restore the score
-        self.score = orig_score
+            weight = normed_cic_scores
         return weight.view(1, k, 1, 1)
 
     def _create_layer_smaps(
@@ -404,10 +477,8 @@ class BaseCAM(CNN, ABC):
         Returns:
             SaliencyMaps: layer saliency maps.
         """
-        if self.channel_weight is not None:
-            channel_weight = self.channel_weight
-        if self.n_channels is not None:
-            n_channels = n_channels
+        if self.channel_weight_ is not None:
+            channel_weight = self.channel_weight_
         layer_smaps: SaliencyMaps = SaliencyMaps(is_layer=True)
         for channel_smap, (b, k, _, _) in channel_smaps:
             assert b == 1
@@ -424,14 +495,14 @@ class BaseCAM(CNN, ABC):
                 continue
             weight: Tensor
             if channel_weight == "eigen":
-                # calc weight for channels using SVD
+                # calc weight for each channels using SVD
                 weight = self._calc_eigen_weight(
-                    smap=channel_smap,
+                    salient=channel_smap,
                 )
             else:  # channel_weight == "score"
-                # calc weight for channels by calc scores
+                # calc CIC scores as the weight for each channels
                 weight = self._calc_score_weight(
-                    smap=channel_smap,
+                    salient=channel_smap,
                     n_channels=n_channels,
                 )
             # weight channel saliency map
@@ -491,12 +562,12 @@ class BaseCAM(CNN, ABC):
         else:
             heatmap = heatmap.clip(min=0.0, max=1.0)
         # title
-        title: str = f"{self.name}"
+        title: str = f"{self.name_}"
         if fig is None or ax is None:
-            title += f" ({self.labels[self.target_class]})"
+            title += f" ({self.labels_[self.target_class_]})"
         # draw
         draw_image_heatmap(
-            image=self.raw_image,
+            image=self.raw_image_,
             heatmap=heatmap,
             title=title,
             draw_negative=draw_negative,
@@ -508,13 +579,13 @@ class BaseCAM(CNN, ABC):
     def _clear_cache(self: BaseCAM) -> None:
         """clear all caches."""
         super()._clear_cache()
-        self.raw_image = None
-        self.image = None
-        self.blurred_image = None
-        self.width = None
-        self.height = None
-        self.target_class = None
-        self.score = None
+        self.raw_image_ = None
+        self.image_ = None
+        self.blurred_image_ = None
+        self.width_ = None
+        self.height_ = None
+        self.target_class_ = None
+        self.score_ = None
         return
 
     def draw(
@@ -523,7 +594,10 @@ class BaseCAM(CNN, ABC):
         rank: Optional[int] = None,
         label: Optional[int] = None,
         channel_weight: Optional[str] = None,
-        n_channels: Optional[int] = None,
+        n_samples: Optional[int] = None,
+        sigma: Optional[float] = None,
+        random_state: Optional[int] = None,
+        n_channels: Optional[int] = 10,
         draw_negative: bool = False,
         fig: Optional[mpl.figure.Figure] = None,
         ax: Optional[mpl.axes.Axes] = None,
@@ -534,9 +608,13 @@ class BaseCAM(CNN, ABC):
             path (str): the pathname of the original image.
             rank (Optional[int]): the rank of the target class.
             label (Optional[int]): the label of the target class.
-            eigen_weight (bool):
+            channel_weight (bool):
                 if True, weighted activation(s) are further weighted
                 by the first eigenvector of decomposed matrix by SVD.
+            n_samples (Optional[float]): number of samplings
+            sigma (Optional[float]): standard deviation of noise
+            random_state (Optional[int]): random seed
+            n_channels (Optional[int]): the number of channels calc score.
             draw_negative (bool): draw negative regions.
             fig (Optional[mpl.figure.Figure]):
                 the Figure instance that the output image is drawn.
@@ -548,7 +626,13 @@ class BaseCAM(CNN, ABC):
         self._draw_image(
             heatmap=self._merge_layer_smaps(
                 self._create_layer_smaps(
-                    self._create_channel_smaps(self._create_weights()),
+                    self._create_channel_smaps(
+                        self._create_weights(
+                            n_samples=n_samples,
+                            sigma=sigma,
+                            random_state=random_state,
+                        )
+                    ),
                     channel_weight=channel_weight,
                     n_channels=n_channels,
                 )

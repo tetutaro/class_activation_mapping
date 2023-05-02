@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 from __future__ import annotations
+from typing import Any
 
 from cam.base_cam import BaseCAM
 from cam.libs_cam import ResourceCNN, TargetLayer, Weights
@@ -26,21 +27,17 @@ class ScoreCAM(BaseCAM):
         self: ScoreCAM,
         resource: ResourceCNN,
         target: TargetLayer = "last",
-        n_channels: int = -1,
     ) -> None:
         super().__init__(
             resource=resource,
             target=target,
-            requires_grad=False,
             channel_weight="score",
-            n_channels=n_channels,
         )
-        self.n_channels: int = n_channels
         return
 
     def _set_name(self: ScoreCAM) -> None:
-        self.name = "Score-CAM"
+        self.name_ = "Score-CAM"
         return
 
-    def _create_weights(self: ScoreCAM) -> Weights:
-        return self._create_dummy_weights()
+    def _create_weights(self: ScoreCAM, **kwargs: Any) -> Weights:
+        return self._dummy_weights()

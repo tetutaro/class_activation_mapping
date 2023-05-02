@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 from __future__ import annotations
+from typing import Any
 
 from cam.base_cam import BaseCAM
 from cam.libs_cam import ResourceCNN, TargetLayer, Weights
@@ -32,14 +33,8 @@ class GradCAM(BaseCAM):
         return
 
     def _set_name(self: GradCAM) -> None:
-        self.name = "Grad-CAM"
+        self.name_ = "Grad-CAM"
         return
 
-    def _create_weights(self: GradCAM) -> Weights:
-        weights: Weights = Weights()
-        for gradient, (_, k, _, _) in self.gradients:
-            weights.append(
-                gradient.view(1, k, -1).mean(dim=2).view(1, k, 1, 1)
-            )
-        weights.finalize()
-        return weights
+    def _create_weights(self: GradCAM, **kwargs: Any) -> Weights:
+        return self._grad_weights()
