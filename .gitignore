@@ -134,3 +134,5 @@ poetry.lock
 
 # OS settings
 .DS_Store
+
+*.png

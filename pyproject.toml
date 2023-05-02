@@ -1,13 +1,19 @@
 [tool.poetry]
 name = "class-activation-mapping"
 version = "0.0.0"  # Automatically updated up poetry-dynamic-versioning
-description = ""
+description = "CAM, GradCAM, GroupCAM, ..."
 authors = ["Tetsutaro Maruyama <tetsutaro.maruyama@gmail.com>"]
 repository = "https://github.com/tetutaro/class_activation_mapping"
-packages = [{include = "class_activation_mapping"}]
+packages = [{include = "cam"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
+torchvision = "^0.15.1"
+pillow = "^9.5.0"
+matplotlib = "^3.7.1"
+lime = "^0.2.0.1"
+ipython = "^8.13.0"
+tabulate = "^0.9.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.12.0"
@@ -33,7 +39,7 @@ format = "{base}"
 style = "pep440"
 
 [tool.poetry-dynamic-versioning.substitution]
-files = ["class_activation_mapping/__init__.py"]
+files = ["cam/__init__.py"]
 
 # [tool.flake8]
 # -> .flake8
