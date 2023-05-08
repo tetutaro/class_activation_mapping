@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
-"""wrapper class, functions of torchvision.models.mobilenet_v3"""
+"""wrapper classes, functions of torchvision.models.mobilenet_v3"""
 from __future__ import annotations
 from typing import List, Optional, Any
 
@@ -11,7 +11,7 @@ from torchvision.models._api import register_model, WeightsEnum
 from torchvision.models._utils import _ovewrite_named_param
 from torchvision.models.mobilenetv3 import _mobilenet_v3_conf
 
-from cam.libs_cam import ResourceCNN
+from cam.backbones.backbone import Backbone
 
 
 class wMobileNetV3(MobileNetV3):
@@ -76,7 +76,7 @@ def w_mobilenet_v3_large(
     )
 
 
-resource_mobilenet_v3: ResourceCNN = ResourceCNN(
+backbone_mobilenet_v3: Backbone = Backbone(
     net=w_mobilenet_v3_large,
     weights=MobileNet_V3_Large_Weights.IMAGENET1K_V2,
 )

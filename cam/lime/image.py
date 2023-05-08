@@ -9,9 +9,13 @@ from lime.lime_image import LimeImageExplainer, ImageExplanation
 import torch
 import matplotlib as mpl
 
-from cam.cnn import CNN
-from cam.libs_cam import ResourceCNN
-from cam.utils import show_text, draw_image_boundary, draw_image_heatmap
+from cam.base.network import Network
+from cam.backbones.backbone import Backbone
+from cam.utils.display import (
+    show_text,
+    draw_image_boundary,
+    draw_image_heatmap,
+)
 
 
 class PredLabel(NamedTuple):
@@ -29,10 +33,10 @@ class PredLabel(NamedTuple):
         )
 
 
-class LimeImage(CNN):
+class LimeImage(Network):
     def __init__(
         self: LimeImage,
-        resource: ResourceCNN,
+        backbone: Backbone,
         path: str,
         random_state: int,
         top_labels: int = 5,
@@ -42,14 +46,20 @@ class LimeImage(CNN):
         """how to use the LimeImageExplainer.
 
         Args:
-            resource (ResourceCNN): resource of the CNN model.
+            backbone (Backbone): the backbone CNN model.
             path (str): the pathname of the original image.
             ramdom_state (int): the random seed.
             top_labels (int): number of top labels to predict.
             num_features (int): number of features.
             num_samples (int): number of samplings.
         """
-        super().__init__(**resource, target=None)
+        super().__init__(
+            batch_size=8,
+            n_divides=10,
+            n_samples=5,
+            sigma=0.3,
+            **backbone,
+        )
         # load image
         images: np.ndarray = np.array(Image.open(path))[np.newaxis, :]
         # predict labels
@@ -62,10 +72,11 @@ class LimeImage(CNN):
         self.explain_: ImageExplanation = explainer.explain_instance(
             image=images[0],
             classifier_fn=self._predict,
-            labels=self.labels_,
+            labels=self.labels,
             top_labels=self.top_labels_,
             num_features=num_features,
             num_samples=num_samples,
+            batch_size=8,
             hide_color=0,
             random_seed=random_state,
         )
@@ -81,13 +92,12 @@ class LimeImage(CNN):
             np.ndarray: scores for each labels.
         """
         return (
-            self.net_.forward(
-                torch.stack(
-                    [self.transform_(Image.fromarray(img)) for img in images],
+            self.forward(
+                image=torch.stack(
+                    [self.transforms(Image.fromarray(img)) for img in images],
                     dim=0,
-                ).to(self.device_)
+                ).to(self.device)
             )
-            .softmax(dim=1)
             .detach()
             .cpu()
             .numpy()
@@ -107,7 +117,7 @@ class LimeImage(CNN):
             self.preds_.append(
                 PredLabel(
                     label=label,
-                    name=self.labels_[label],
+                    name=self.labels[label],
                     rank=i,
                     score=scores[0, label],
                 )
@@ -171,7 +181,7 @@ class LimeImage(CNN):
         # create title
         title: str = "LIME"
         if fig is None or ax is None:
-            title += f" ({self.labels_[self.explain_.top_labels[rank]]})"
+            title += f" ({self.labels[self.explain_.top_labels[rank]]})"
         # draw
         draw_image_heatmap(
             image=self.explain_.image,
