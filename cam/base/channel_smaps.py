@@ -3,7 +3,6 @@
 from __future__ import annotations
 from typing import List, Dict, Optional, Callable, Any
 
-import numpy as np
 import torch
 from torch import Tensor
 import torch.nn.functional as F
@@ -112,16 +111,25 @@ class ChannelSMAPS(CommonSMAP):
         Returns:
             Tensor: the weight for each channels.
         """
-        k: int = channel_shape(smap)
-        ablated_list: List[Tensor] = list()
+        if DEBUG:
+            len(ctx.activations) == 1
+        activation: Tensor = ctx.activations[0]
+        k: int = channel_shape(activation)
+        if DEBUG:
+            assert channel_shape(smap) == k
+        ablation_list: List[Tensor] = list()
         for i in range(k):
             # drop i-th channel (ablation)
-            ablated_map: Tensor = smap.clone()
-            ablated_map[:, i, :, :] = 0.0
-            ablated_list.append(ablated_map)
-        ablateds: Tensor = torch.cat(ablated_list, dim=0)
-        scores: Tensor = ctx.classify_fn(activations=ablateds, label=ctx.label)
-        weight: Tensor = (ctx.score - scores) / (ctx.score + self.eps)
+            ablation: Tensor = activation.clone()
+            ablation[:, i, :, :] = 0
+            ablation_list.append(ablation)
+        ablations: Tensor = torch.cat(ablation_list, dim=0)
+        # forward Ablations and retrieve Ablation score
+        a_scores: Tensor = ctx.classify_fn(activation=ablations)[:, ctx.label]
+        # weight = slope of Ablation score
+        weight: Tensor = (ctx.score - a_scores) / (ctx.score + self.eps)
+        del ablations
+        del a_scores
         return weight.view(1, k, 1, 1)
 
     def _channel_abscission_weight(
@@ -154,20 +162,20 @@ class ChannelSMAPS(CommonSMAP):
         mask_dicts: List[Dict] = list()
         for i in range(k):
             # extract i-th channel from the saliency map ("Abscission")
-            absc: Tensor = smap.clone()[:, [i], :, :]
+            abscission: Tensor = smap.clone()[:, [i], :, :]
             # normalize
-            smax: float = absc.detach().max().cpu().numpy().ravel()[0]
-            smin: float = absc.detach().min().cpu().numpy().ravel()[0]
-            sdif: float = smax - smin
+            smax: Tensor = abscission.max().squeeze()
+            smin: Tensor = abscission.min().squeeze()
+            sdif: Tensor = smax - smin
             if sdif < self.eps:
                 continue
-            # create smoother mask of the original image
-            mask: Tensor = (absc - smin) / sdif
+            # create smoother mask for the original image
+            mask: Tensor = (abscission - smin) / sdif
             # stack information
             mask_dicts.append(
                 {
                     "channel": i,
-                    "key": sdif,
+                    "key": sdif.detach().cpu().numpy().ravel()[0],
                     "mask": mask,
                 }
             )
@@ -175,48 +183,41 @@ class ChannelSMAPS(CommonSMAP):
             mask_dicts = sorted(
                 mask_dicts, key=lambda x: x["key"], reverse=True
             )[: self.n_channels_]
-        # calc CIC scores
+        # create masked image
         masked_list: List[Tensor] = list()
         for mask_dict in mask_dicts:
-            # create masked image
             masked: Tensor = ctx.image * mask_dict["mask"]
             # SIGCAM
             # Q. Zhang, et al.
             # "A Novel Visual Interpretability for Deep Neural Networks
             # by Optimizing Activation Maps with Perturbation"
             # AAAI 2021.
-            # masked += ctx.blurred_image * (1.0 - mask_dict["mask"])
+            masked += ctx.blurred_image * (1.0 - mask_dict["mask"])
             masked_list.append(masked)
-        masked_images: Tensor = torch.cat(masked_list, dim=0)
-        # forward network
-        masked_scores: np.ndarray = (
-            ctx.forward_fn(image=masked_images)[:, ctx.label]
-            .detach()
-            .squeeze()
-            .cpu()
-            .numpy()
-            .ravel()
-        )
-        # CIC scores
-        cic_scores: List[float] = (masked_scores - ctx.score).tolist()
-        # normalize CIC scores
+        maskedes: Tensor = torch.cat(masked_list, dim=0)
+        # forward network, calc CIC scores and normalize it
+        # (CIC: Channel-wise Increase of Confidence)
+        # CIC score = (Abscission masked score) - (original score)
+        # ## normalize CIC scores
         # The paper of Score-CAM use softmax for normalization.
         # But softmax turns negative values into positive values.
         # For that reason, if the target class is not the first rank,
         # the positive region of saliency map can't show the target.
         # So, Here, use normalization with L2-norm instead of softmax.
-        normed_cic_scores: Tensor = F.normalize(
-            torch.tensor(cic_scores).to(self.device), dim=0
+        cic_scores: Tensor = F.normalize(
+            ctx.forward_fn(image=maskedes)[:, ctx.label].squeeze() - ctx.score,
+            dim=0,
         )
+        del maskedes
         # create weight
         weight: Tensor
-        if batch_shape(normed_cic_scores) < k:
+        if batch_shape(cic_scores) < k:
             idx: Tensor = torch.tensor([x["channel"] for x in mask_dicts]).to(
                 self.device
             )
             weight = (
                 torch.zeros(k)
-                .scatter(dim=0, index=idx, src=normed_cic_scores)
+                .scatter(dim=0, index=idx, src=cic_scores)
                 .to(self.device)
             )
             del cic_scores

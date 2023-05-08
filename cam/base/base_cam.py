@@ -279,6 +279,10 @@ class BaseCAM(Network, RawSMAPS, PositionSMAPS, ChannelSMAPS, FinalSMAP):
             # decide the target label
             if rank is None:
                 rank = 1
+            if rank >= self.n_labels:
+                raise ValueError(
+                    f"rank ({rank}) is too large (< {self.n_labels})"
+                )
             scores: Tensor = self.forward(image=image)
             if DEBUG:
                 assert batch_shape(scores) == 1
@@ -290,6 +294,10 @@ class BaseCAM(Network, RawSMAPS, PositionSMAPS, ChannelSMAPS, FinalSMAP):
                 .numpy()[rank]
             )
             del scores
+        elif label >= self.n_labels:
+            raise ValueError(
+                f"label ({label}) is too large (< {self.n_labels})"
+            )
         # forward network
         acquired: Acquired = self.acquires_grad(
             target_layers=target_layers,

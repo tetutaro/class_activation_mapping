@@ -21,7 +21,7 @@ help:
 
 .PHONY: sphinx-apidoc
 sphinx-apidoc:
-	sphinx-apidoc --ext-autodoc -f -o source/modules -M "../class_activation_mapping/"
+	sphinx-apidoc --ext-autodoc -f -o source/modules -M "../cam"
 	rm -f source/modules/modules.rst
 
 .PHONY: html

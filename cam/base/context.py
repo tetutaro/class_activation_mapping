@@ -15,7 +15,7 @@ class Context(NamedTuple):
     """the context of CAM model"""
 
     forward_fn: Callable[[Tensor], Tensor]
-    classify_fn: Callable[[Tensor, int], Tensor]
+    classify_fn: Callable[[Tensor], Tensor]
     raw_image: Image
     width: int
     height: int

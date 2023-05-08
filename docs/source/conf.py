@@ -6,7 +6,7 @@ import sys
 
 from sphinx_pyproject_poetry import SphinxConfig
 
-sys.path.insert(0, os.path.abspath("../../class_activation_mapping"))
+sys.path.insert(0, os.path.abspath("../../cam"))
 config: SphinxConfig = SphinxConfig("../../pyproject.toml", globalns=globals())
 project: str = config.name
 
@@ -20,7 +20,7 @@ def linkcode_resolve(
     if not info["module"]:
         return None
     filename = info["module"].replace(".", "/")
-    if filename == "class_activation_mapping":
+    if filename == "cam":
         filename += "/__init__.py"
     elif not filename.endswith(".py"):
         filename += ".py"

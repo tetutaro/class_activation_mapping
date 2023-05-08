@@ -478,43 +478,6 @@ class Network(CommonSMAP):
 
     # ## acquire functions
 
-    def _grad_batches(
-        self: Network,
-        image: Tensor,
-        label: int,
-    ) -> Acquired:
-        """forward and backward image to CNN for each batches.
-
-        Args:
-            image (Tensor): the image.
-            label (int): the target label.
-
-        Returns:
-            Acquired: the result of forwarding and backwarding the image.
-        """
-        if DEBUG:
-            assert batch_shape(image) == 1
-        # forward network
-        logit: Tensor = self.net_.forward(image)
-        # get scores
-        scores: Tensor = logit.clone().detach()
-        # backward network
-        self.net_.zero_grad()
-        logit[:, label].backward(retain_graph=False)
-        # create aquired
-        self.activations_.finalize()
-        self.gradients_.finalize()
-        acquired: Acquired = Acquired(
-            activations=self.activations_.clone(),
-            gradients=self.gradients_.clone(),
-            scores=scores,
-        )
-        acquired.finalize()
-        # clear cache
-        self.activations_.clear()
-        self.gradients_.clear()
-        return acquired
-
     def _simple_grad(
         self: Network,
         image: Tensor,
@@ -536,12 +499,27 @@ class Network(CommonSMAP):
         # forward image for each batch
         acquired_list: List[Acquired] = list()
         for i in range(b):
-            acquired_list.append(
-                self._grad_batches(
-                    image=image[i : i + 1, ...],
-                    label=label,
-                )
+            # forward network
+            logit: Tensor = self.softmax_(self.net_.forward(image[[i], ...]))
+            # get scores
+            scores: Tensor = logit.clone().detach()
+            # backward network
+            self.net_.zero_grad()
+            logit[0, label].backward(retain_graph=False)
+            # create aquired
+            self.activations_.finalize()
+            self.gradients_.finalize()
+            acquired: Acquired = Acquired(
+                activations=self.activations_.clone(),
+                gradients=self.gradients_.clone(),
+                scores=scores,
             )
+            acquired.finalize()
+            # clear cache
+            self.activations_.clear()
+            self.gradients_.clear()
+            # add acquired to the list
+            acquired_list.append(acquired)
         return merge_acquired_list(acquired_list=acquired_list)
 
     def _integrate_grad(
@@ -678,41 +656,37 @@ class Network(CommonSMAP):
 
     def _classify_batches(
         self: Network,
-        activations: Tensor,
-        label: int,
+        activation: Tensor,
     ) -> Tensor:
         """forward activation to the classifier part of CNN for each batches.
 
         Args:
-            activations (Tensor): activation of the last Conv. Layer
-            label (int): the target label.
+            activation (Tensor): activation of the last Conv. Layer
 
         Returns:
-            Tensor: the score of the target label.
+            Tensor: scores
         """
         with torch.no_grad():
             scores: Tensor = self.softmax_(
-                self.net_.forward_classifier(activation=activations)
+                self.net_.forward_classifier(activation=activation)
             )
-        return scores.clone().detach()[:, [label]]
+        return scores.clone().detach()
 
     def classify(
         self: Network,
-        activations: Tensor,
-        label: int,
+        activation: Tensor,
     ) -> Tensor:
-        """forward activations to the classifier part of CNN.
+        """forward activation to the classifier part of CNN.
 
         Args:
-            activations (Tensor): activations of the last Conv. Layer
-            label (int): the target label.
+            activation (Tensor): activation of the last Conv. Layer
 
         Returns:
-            Tensor: the score of the target label.
+            Tensor: scores
         """
         if DEBUG:
             assert self.target_layers_ is None
-        b: int = batch_shape(activations)
+        b: int = batch_shape(activation)
         n_batches: int = b // self.batch_size_
         if b % self.batch_size_ > 0:
             n_batches += 1
@@ -722,12 +696,11 @@ class Network(CommonSMAP):
             end: int = min((i + 1) * self.batch_size_, b)
             scores_list.append(
                 self._classify_batches(
-                    activations=activations[begin:end, ...],
-                    label=label,
+                    activation=activation[begin:end, ...],
                 )
             )
         scores: Tensor = torch.cat(scores_list, dim=0)
         if DEBUG:
             assert batch_shape(scores) == b
-            assert channel_shape(scores) == 1
+            assert channel_shape(scores) == self.n_labels
         return scores
