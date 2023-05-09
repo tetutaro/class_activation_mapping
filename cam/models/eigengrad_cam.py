@@ -7,24 +7,24 @@ from cam.base.base_cam import BaseCAM
 from cam.backbones.backbone import Backbone
 
 
-class VanillaCAM(BaseCAM):
-    """CAM
+class EigenGradCAM(BaseCAM):
+    """EigenGrad-CAM
 
-    "Learning Deep Features for Discriminative Localization"
-
-    https://arxiv.org/abs/1512.04150
+    Eigen-CAM + Grad-CAM
 
     Args:
         backbone (Backbone): resouce of CNN.
     """
 
     def __init__(
-        self: VanillaCAM,
+        self: EigenGradCAM,
         backbone: Backbone,
         **kwargs: Any,
     ) -> None:
         super().__init__(
-            name="CAM",
+            name="EigenGrad-CAM",
             backbone=backbone,
-            activation_weight="class",
+            activation_weight="gradient",
+            channel_weight="eigen",
         )
+        return

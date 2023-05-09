@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 from __future__ import annotations
-from typing import Optional
+from typing import Optional, Any
 
 from cam.base.base_cam import BaseCAM
 from cam.backbones.backbone import Backbone
@@ -29,6 +29,7 @@ class SmoothGradCAMpp(BaseCAM):
         n_samples: int = 8,
         sigma: float = 0.3,
         random_state: Optional[int] = None,
+        **kwargs: Any,
     ) -> None:
         super().__init__(
             name="Smooth Grad-CAM++",

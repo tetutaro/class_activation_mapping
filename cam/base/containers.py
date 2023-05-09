@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
-"""the module of container classes"""
+"""the module of containers for activations and gradients
+
+Each activations and gradients have
+different number of width, height and channels by the layer they was retrieved.
+(But each number of batch is the same)
+"""
 from __future__ import annotations
 from typing import List, Dict
 

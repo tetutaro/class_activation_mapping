@@ -85,8 +85,14 @@ class BaseCAM(Network, RawSMAPS, PositionSMAPS, ChannelSMAPS, FinalSMAP):
         n_samples (int): number of samplings. (use it in SmoothGrad)
         n_positions (int): the max number of culculate abscissions.
         n_position_groups (Optional[int]): the number of positional clusters.
+        position_minmax (bool):
+            activate the best position group (cognition base)
+            and inactivate the worst one (cognition scissors).
         n_channels (int): the max number of culculate abscissions.
         n_channel_groups (Optional[int]): the number of channel clusters.
+        channel_minmax (bool):
+            activate the best channel group (cognition base)
+            and inactivate the worst one (cognition scissors).
         sigma (float): sdev of Normal Dist. (use it in SmoothGrad)
         random_state (Optional[int]): the random seed.
     """
@@ -114,8 +120,10 @@ class BaseCAM(Network, RawSMAPS, PositionSMAPS, ChannelSMAPS, FinalSMAP):
         n_samples: int = 8,
         n_positions: int = -1,
         n_position_groups: Optional[int] = None,
+        position_minmax: bool = False,
         n_channels: int = -1,
         n_channel_groups: Optional[int] = None,
+        channel_minmax: bool = False,
         sigma: float = 0.3,
         random_state: Optional[int] = None,
     ) -> None:
@@ -136,11 +144,16 @@ class BaseCAM(Network, RawSMAPS, PositionSMAPS, ChannelSMAPS, FinalSMAP):
             n_samples=n_samples,
             n_positions=n_positions,
             n_position_groups=n_position_groups,
+            position_minmax=position_minmax,
             n_channels=n_channels,
             n_channel_groups=n_channel_groups,
+            channel_minmax=channel_minmax,
             sigma=sigma,
+            random_state=random_state,
             **backbone,
         )
+        # check arguments
+        self._check_arguments()
         # set flags
         if activation_weight == "class":
             self.target_last_layer_ = True

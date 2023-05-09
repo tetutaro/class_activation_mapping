@@ -7,24 +7,28 @@ from cam.base.base_cam import BaseCAM
 from cam.backbones.backbone import Backbone
 
 
-class VanillaCAM(BaseCAM):
-    """CAM
+class InteGradCAM(BaseCAM):
+    """InteGrad-CAM
 
-    "Learning Deep Features for Discriminative Localization"
+    IntegratedGrad + Grad-CAM
 
-    https://arxiv.org/abs/1512.04150
+    "Axiomatic Attribution for Deep Networks" (IntegratedGrad)
+
+    https://arxiv.org/abs/1703.01365
 
     Args:
         backbone (Backbone): resouce of CNN.
     """
 
     def __init__(
-        self: VanillaCAM,
+        self: InteGradCAM,
         backbone: Backbone,
         **kwargs: Any,
     ) -> None:
         super().__init__(
-            name="CAM",
+            name="InteGrad-CAM",
             backbone=backbone,
-            activation_weight="class",
+            activation_weight="gradient",
+            gradient_smooth="integral",
         )
+        return

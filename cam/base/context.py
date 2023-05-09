@@ -12,7 +12,9 @@ from cam.base.containers import Weights, SaliencyMaps
 
 
 class Context(NamedTuple):
-    """the context of CAM model"""
+    """the context of CAM model
+    (each prediction of descriminative image regions for the indicated label).
+    """
 
     forward_fn: Callable[[Tensor], Tensor]
     classify_fn: Callable[[Tensor], Tensor]

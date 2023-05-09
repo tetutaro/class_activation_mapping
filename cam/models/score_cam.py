@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 from __future__ import annotations
+from typing import Any
 
 from cam.base.base_cam import BaseCAM
 from cam.backbones.backbone import Backbone
@@ -23,6 +24,7 @@ class ScoreCAM(BaseCAM):
         self: ScoreCAM,
         backbone: Backbone,
         n_channels: int = -1,
+        **kwargs: Any,
     ) -> None:
         super().__init__(
             name="Score-CAM",

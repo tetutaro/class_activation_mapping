@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 from __future__ import annotations
+from typing import Any
 
 from cam.base.base_cam import BaseCAM
 from cam.backbones.backbone import Backbone
@@ -21,11 +22,11 @@ class EigenCAM(BaseCAM):
     def __init__(
         self: EigenCAM,
         backbone: Backbone,
+        **kwargs: Any,
     ) -> None:
         super().__init__(
             name="Eigen-CAM",
             backbone=backbone,
-            activation_weight="gradient",
             channel_weight="eigen",
         )
         return

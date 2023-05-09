@@ -24,6 +24,9 @@ class PositionSMAPS(CommonSMAP):
         self.position_group: str = kwargs["position_group"]
         self.n_positions_: int = kwargs["n_positions"]
         self.n_position_groups: Optional[int] = kwargs["n_position_groups"]
+        self.position_minmax_: bool = kwargs["position_minmax"]
+        if self.position_weight == "none":
+            self.position_minmax_ = False
         return
 
     def _fake_smaps(
@@ -114,7 +117,7 @@ class PositionSMAPS(CommonSMAP):
                 assert batch_shape(smap) == 1
             # the function to create weights for each positions
             fn: Callable[[Tensor, Context], Tensor]
-            if self.position_weight in ["eigen", "cosine"]:
+            if self.position_weight == "eigen":
                 fn = self._position_eigen_weight
             elif self.position_weight == "ablation":
                 fn = self._position_ablation_weight

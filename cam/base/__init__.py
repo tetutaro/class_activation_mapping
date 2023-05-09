@@ -35,7 +35,6 @@ position_weights: List[str] = [
     "none",  # do nothing
     "fake",  # Fake-CAM
     "eigen",  # first eigen-vector (Eigen-CAM)
-    "cosine",  # cosine distance
     "ablation",  # position-wise Ablation (Ablation-CAM)
     "abscission",  # position-wise Abscission (Score-CAM)
 ]
@@ -43,7 +42,6 @@ position_weights: List[str] = [
 channel_weights: List[str] = [
     "none",  # average over channels
     "eigen",  # first eigen-vector (Eigen-CAM)
-    "cosine",  # cosine distance
     "ablation",  # channel-wise Ablation (Ablation-CAM)
     "abscission",  # channel-wise Abscission (Score-CAM)
 ]
@@ -51,8 +49,7 @@ channel_weights: List[str] = [
 group_types: List[str] = [
     "none",  # calc weights for each positions/channels
     "k-means",  # k-Means (Group-CAM)
-    "spectral-euc",  # Spectral Clustering with euclidean distance(Cluster-CAM)
-    "spectral-cos",  # Spectral Clustering with cosine distance
+    "spectral",  # Spectral Clustering (Cluster-CAM)
 ]
 # method of merging layers
 merge_layers: List[str] = [
