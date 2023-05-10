@@ -13,7 +13,7 @@ from torchvision.models import (
     VGG16_Weights,
     VGG19_Weights,
 )
-from torchvision.models import register_model, WeightsEnum
+from torchvision.models._api import register_model, WeightsEnum
 from torchvision.models._utils import _ovewrite_named_param
 from torchvision.models.vgg import cfgs, make_layers
 

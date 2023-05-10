@@ -18,6 +18,7 @@ from cam.base import (
     Shape,
     batch_shape,
     channel_shape,
+    position_shape,
     CommonSMAP,
 )
 from cam.base.containers import Weights, Activations, Gradients
@@ -299,16 +300,15 @@ class Network(CommonSMAP):
         # number of channels of last Conv. Layer
         assert len(self.init_activations_) == len(info_conv_layers)
         self.n_channels_last_ = channel_shape(self.init_activations_[-1])
-        # distribute blocks according to its shape of activation
+        # distribute blocks according to its position shape of activation
         shape_dict: DefaultDict[List] = defaultdict(list)
         for activation, block in zip(
             self.init_activations_, sorted(info_conv_layers.keys())
         ):
-            shape: Shape = activation.size()
             info_conv_layers[block]["shape"] = "x".join(
-                [str(s) for s in shape]
+                [str(s) for s in activation.shape]
             )
-            shape_dict[shape].append(block)
+            shape_dict[position_shape(activation)].append(block)
         # select the last blocks over shape of activation
         last_blocks: List[int] = list()
         for shape, blocks in shape_dict.items():

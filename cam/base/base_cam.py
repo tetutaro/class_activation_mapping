@@ -208,6 +208,13 @@ class BaseCAM(Network, RawSMAPS, PositionSMAPS, ChannelSMAPS, FinalSMAP):
             _raise_error(name="channel_group")
         if self.merge_layer not in merge_layers:
             _raise_error(name="merge_layer")
+        if (
+            (self.position_weight == "abscission")
+            or (self.channel_weight == "abscission")
+        ) and (self.merge_layer == "multiply"):
+            raise ValueError(
+                'if merge_leyer=="multiply", do not use "abscission"'
+            )
         return
 
     def _convert_target(self: BaseCAM, target: TargetLayer) -> None:

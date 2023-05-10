@@ -54,7 +54,7 @@ group_types: List[str] = [
 # method of merging layers
 merge_layers: List[str] = [
     "none",  # sum over layers (Layer-CAM)
-    "muliply",  # Poly-CAM
+    "multiply",  # Poly-CAM
 ]
 
 # original types

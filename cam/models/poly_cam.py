@@ -7,8 +7,8 @@ from cam.base.base_cam import BaseCAM
 from cam.backbones.backbone import Backbone
 
 
-class LayerCAM(BaseCAM):
-    """Layer-CAM
+class PolyCAM(BaseCAM):
+    """Poly-CAM
 
     "LayerCAM:
     Exploring Hierarchical Class Activation Maps for Localization"
@@ -20,14 +20,15 @@ class LayerCAM(BaseCAM):
     """
 
     def __init__(
-        self: LayerCAM,
+        self: PolyCAM,
         backbone: Backbone,
         **kwargs: Any,
     ) -> None:
         super().__init__(
-            name="Layer-CAM",
+            name="Poly-CAM",
             backbone=backbone,
             activation_weight="gradient++",
             gradient_gap=False,
+            merge_layer="multiply",
         )
         return
