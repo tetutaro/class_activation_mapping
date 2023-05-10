@@ -27,7 +27,7 @@ class PolyCAM(BaseCAM):
         super().__init__(
             name="Poly-CAM",
             backbone=backbone,
-            activation_weight="gradient++",
+            activation_weight="gradient",
             gradient_gap=False,
             merge_layer="multiply",
         )

@@ -52,7 +52,9 @@ class FinalSMAP(CommonSMAP):
             smap_list.append(smap / smap.max())
         stacked_smap: Tensor = torch.stack(smap_list, dim=0)
         # sum -> final saliency map
-        final_smap: Tensor = stacked_smap.sum(dim=0).squeeze()
+        final_smap: Tensor = (
+            F.relu(stacked_smap).sum(dim=0) - F.relu(-stacked_smap).sum(dim=0)
+        ).squeeze()
         channel_smaps.clear()
         del stacked_smap
         return final_smap
@@ -72,31 +74,53 @@ class FinalSMAP(CommonSMAP):
             Tensor: final saliency map.
         """
         # base of final saliency map
-        smap_list = [x for x in channel_smaps]
-        final_smap: Tensor = smap_list[0]
+        n_layers: int = len(channel_smaps)
+        final_smap: Tensor = channel_smaps[0]
         base_u, base_v = position_shape(final_smap)
-        for smap in smap_list[1:]:
-            u, v = position_shape(smap)
+        for layer in range(1, n_layers):
+            # create mask from activation
+            activation: Tensor = ctx.activations[layer]
+            mask_p: Tensor = F.relu(activation).max(dim=1, keepdim=True).values
+            mask_m: Tensor = (
+                F.relu(-activation).max(dim=1, keepdim=True).values
+            )
+            mask: Tensor = mask_p - mask_m
+            u, v = position_shape(mask)
             if DEBUG:
                 assert u % base_u == 0
                 assert u > base_u
                 assert (u // base_u) * base_v == v
+                assert mask.shape == channel_smaps[layer].shape
             factor: int = u // base_u
-            # create blurred mask from activation
-            mask: Tensor = smap / (
+            # normalize mask
+            # m_max: Tensor = mask.max()
+            # m_min: Tensor = mask.min()
+            # mask = (mask - m_min) / (m_max - m_min + self.eps)
+            # mask = (mask / mask.max()).clamp(min=-1.0, max=1.0)
+            # blur mask
+            mask_p = mask_p / (
                 F.interpolate(
-                    F.avg_pool2d(F.relu(smap), kernel_size=factor),
+                    F.avg_pool2d(mask_p, kernel_size=factor),
+                    scale_factor=factor,
+                    mode="bilinear",
+                )
+                + self.eps
+            )
+            mask_m = mask_m / (
+                F.interpolate(
+                    F.avg_pool2d(mask_m, kernel_size=factor),
                     scale_factor=factor,
                     mode="bilinear",
                 )
                 + self.eps
             )
             # update final saliency map by multiplying mask
-            final_smap = mask * F.interpolate(
+            f_smap = F.interpolate(
                 final_smap,
                 scale_factor=factor,
                 mode="bilinear",
             )
+            final_smap = (mask_p * F.relu(f_smap)) - (mask_m * F.relu(-f_smap))
             base_u = u
             base_v = v
         channel_smaps.clear()

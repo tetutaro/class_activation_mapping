@@ -27,7 +27,7 @@ class LayerCAM(BaseCAM):
         super().__init__(
             name="Layer-CAM",
             backbone=backbone,
-            activation_weight="gradient++",
+            activation_weight="gradient",
             gradient_gap=False,
         )
         return
