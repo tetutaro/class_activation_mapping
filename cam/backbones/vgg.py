@@ -25,13 +25,11 @@ class wVGG(VGG):
         """forward the activation of the last Conv. Layer
         to the classifier block of the CNN model.
         """
-        for layer in self.features[-2][1:]:
+        for layer in self.features[-2:]:
             activation = layer(activation)
         return self.classifier(
             torch.flatten(
-                self.avgpool(
-                    self.features[-1](activation),
-                ),
+                self.avgpool(activation),
                 1,
             )
         )

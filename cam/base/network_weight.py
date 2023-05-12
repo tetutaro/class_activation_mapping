@@ -426,7 +426,7 @@ class NetworkWeight(CommonWeight):
             )
         class_weight: Tensor = torch.stack(cweight_list, dim=1).squeeze(2)
         if DEBUG:
-            assert batch_shape(class_weight) == self.n_labels_
+            assert batch_shape(class_weight) == self.n_labels
             assert channel_shape(class_weight) == self.n_channels_last_
         return class_weight
 
