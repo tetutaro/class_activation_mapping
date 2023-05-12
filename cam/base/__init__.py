@@ -25,18 +25,11 @@ smooth_types: List[str] = [
 # types of weights for each activations
 activation_weights: List[str] = [
     "none",  # all values == 1
+    "fake",  # Fake-CAM
     "class",  # CAM
     "gradient",  # Grad-CAM
     "gradient++",  # Grad-CAM++
     "axiom",  # XGrad-CAM
-]
-# methods of weighting for each positions
-position_weights: List[str] = [
-    "none",  # do nothing
-    "fake",  # Fake-CAM
-    "eigen",  # first eigen-vector (Eigen-CAM)
-    "ablation",  # position-wise Ablation (Ablation-CAM)
-    "abscission",  # position-wise Abscission (Score-CAM)
 ]
 # methods of weighting for each channels
 channel_weights: List[str] = [
@@ -45,16 +38,11 @@ channel_weights: List[str] = [
     "ablation",  # channel-wise Ablation (Ablation-CAM)
     "abscission",  # channel-wise Abscission (Score-CAM)
 ]
-# clustering methods for positions/channels
+# clustering methods for channels
 group_types: List[str] = [
-    "none",  # calc weights for each positions/channels
+    "none",  # calc weight for each channels
     "k-means",  # k-Means (Group-CAM)
     "spectral",  # Spectral Clustering (Cluster-CAM)
-]
-# method of merging layers
-merge_layers: List[str] = [
-    "none",  # sum over layers (Layer-CAM)
-    "multiply",  # Poly-CAM
 ]
 
 # original types
@@ -74,12 +62,12 @@ position_shape: Callable[[Tensor], Tuple[int, int]] = lambda x: tuple(
 )
 
 
-class CommonSMAP:
+class CommonWeight:
     """the common class for
-    Network, RawSMAPS, PositionSMAPS, ChannelSMAPS and FinalSMAP.
+    NetworkWeight, ActivationWeight, ChannelWeight and LayerWeight.
     """
 
-    def __init__(self: CommonSMAP, **kwargs: Any) -> None:
+    def __init__(self: CommonWeight, **kwargs: Any) -> None:
         self.device: str = "cuda" if torch.cuda.is_available() else "cpu"
         self.eps: float = 1e-6
         self.random_state: Optional[int] = kwargs.get("random_state")

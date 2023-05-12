@@ -9,7 +9,7 @@ from lime.lime_image import LimeImageExplainer, ImageExplanation
 import torch
 import matplotlib as mpl
 
-from cam.base.network import Network
+from cam.base.network_weight import NetworkWeight
 from cam.backbones.backbone import Backbone
 from cam.utils.display import (
     show_text,
@@ -33,15 +33,16 @@ class PredLabel(NamedTuple):
         )
 
 
-class LimeImage(Network):
+class LimeImage(NetworkWeight):
     def __init__(
         self: LimeImage,
         backbone: Backbone,
         path: str,
-        random_state: int,
         top_labels: int = 5,
         num_features: int = 100000,
         num_samples: int = 1000,
+        batch_size: int = 8,
+        random_state: Optional[int] = None,
     ) -> None:
         """how to use the LimeImageExplainer.
 
@@ -52,12 +53,14 @@ class LimeImage(Network):
             top_labels (int): number of top labels to predict.
             num_features (int): number of features.
             num_samples (int): number of samplings.
+            batch_size (int): max number of images in a batch.
         """
         super().__init__(
-            batch_size=8,
-            n_divides=10,
-            n_samples=5,
-            sigma=0.3,
+            n_divides=10,  # dummy value
+            n_samples=5,  # dummy value
+            sigma=0.3,  # dummy value
+            batch_size=batch_size,
+            random_state=random_state,
             **backbone,
         )
         # load image
@@ -76,7 +79,7 @@ class LimeImage(Network):
             top_labels=self.top_labels_,
             num_features=num_features,
             num_samples=num_samples,
-            batch_size=8,
+            batch_size=batch_size,
             hide_color=0,
             random_seed=random_state,
         )

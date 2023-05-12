@@ -11,27 +11,27 @@ from cam.base import (
     DEBUG,
     batch_shape,
     channel_shape,
-    CommonSMAP,
+    CommonWeight,
 )
 from cam.base import position_shape
 from cam.base.containers import SaliencyMaps
 from cam.base.context import Context
 
 
-class FinalSMAP(CommonSMAP):
+class LayerWeight(CommonWeight):
     """A part of the CAM model that is responsible for final saliency map.
 
     XXX
     """
 
-    def __init__(self: FinalSMAP, **kwargs: Any) -> None:
+    def __init__(self: LayerWeight, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         # store flags
-        self.merge_layer: str = kwargs["merge_layer"]
+        self.high_resolution_: bool = kwargs["high_resolution"]
         return
 
     def _sum_channel_smaps(
-        self: FinalSMAP,
+        self: LayerWeight,
         channel_smaps: SaliencyMaps,
         ctx: Context,
     ) -> Tensor:
@@ -60,7 +60,7 @@ class FinalSMAP(CommonSMAP):
         return final_smap
 
     def _mul_channel_smaps(
-        self: FinalSMAP,
+        self: LayerWeight,
         channel_smaps: SaliencyMaps,
         ctx: Context,
     ) -> Tensor:
@@ -131,9 +131,9 @@ class FinalSMAP(CommonSMAP):
             mode="bilinear",
         ).squeeze()
 
-    def create_final_smap(
-        self: FinalSMAP,
-        channel_smaps: SaliencyMaps,
+    def weight_layer(
+        self: LayerWeight,
+        smaps: SaliencyMaps,
         ctx: Context,
     ) -> Tensor:
         """merge layer saliency maps and conver it to heatmap.
@@ -146,20 +146,18 @@ class FinalSMAP(CommonSMAP):
             Tensor: final saliency map.
         """
         if DEBUG:
-            assert len(channel_smaps) > 0
-            for smap in channel_smaps:
+            assert len(smaps) > 0
+            for smap in smaps:
                 assert batch_shape(smap) == 1
                 assert channel_shape(smap) == 1
         # if number of layres == 1, just return channel saliency map
-        if len(channel_smaps) == 1:
+        if len(smaps) == 1:
             # enlarge channel saliency maps
-            return ctx.enlarge_fn(smaps=channel_smaps)[0].squeeze()
+            return ctx.enlarge_fn(smaps=smaps)[0].squeeze()
         # merge channel saliency maps over layers
         fn: Callable[[SaliencyMaps, Context], Tensor]
-        if self.merge_layer == "none":
-            fn = self._sum_channel_smaps
-        elif self.merge_layer == "multiply":
+        if self.high_resolution_:
             fn = self._mul_channel_smaps
         else:
-            raise SystemError(f"invalid merge_layer: {self.merge_layer}")
-        return fn(channel_smaps=channel_smaps, ctx=ctx)
+            fn = self._sum_channel_smaps
+        return fn(channel_smaps=smaps, ctx=ctx)

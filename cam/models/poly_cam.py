@@ -31,6 +31,6 @@ class PolyCAM(BaseCAM):
             backbone=backbone,
             activation_weight="gradient",
             gradient_gap=False,
-            merge_layer="multiply",
+            high_resolution=True,
         )
         return

@@ -6,21 +6,21 @@ from typing import Callable, Any
 import torch
 from torch import Tensor
 
-from cam.base import channel_shape, CommonSMAP
+from cam.base import channel_shape, CommonWeight
 from cam.base.containers import Weights, SaliencyMaps
 from cam.base.context import Context
 
 
-class RawSMAPS(CommonSMAP):
+class ActivationWeight(CommonWeight):
     """A part of the CAM model that is responsible for raw saliency maps.
 
-    RawSMAPS (output of Conv. Layer(s) when forwarding) represent
+    ActivationWeight (output of Conv. Layer(s) when forwarding) represent
     which region of image was payed attention to recognize the target object.
 
     XXX
     """
 
-    def __init__(self: RawSMAPS, **kwargs: Any) -> None:
+    def __init__(self: ActivationWeight, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         # store flags
         self.activation_weight: str = kwargs["activation_weight"]
@@ -31,7 +31,9 @@ class RawSMAPS(CommonSMAP):
         self.class_weights_: Tensor
         return
 
-    def set_class_weights(self: RawSMAPS, class_weights: Tensor) -> None:
+    def set_class_weights(
+        self: ActivationWeight, class_weights: Tensor
+    ) -> None:
         """set class weights
 
         Args:
@@ -40,8 +42,29 @@ class RawSMAPS(CommonSMAP):
         self.class_weights_ = class_weights
         return
 
-    def _dummy_weights(self: RawSMAPS, ctx: Context) -> Weights:
-        """returns the dummy weights (each values of weights = 1).
+    def _fake_smaps(self: ActivationWeight, ctx: Context) -> SaliencyMaps:
+        """create fake saliency map whose values are almost 1.
+        (except the top left corner)
+
+        Args:
+            ctx (Context): the context of this process.
+
+        Returns:
+            SaliencyMaps: fake saliency maps.
+        """
+        fake_smaps: SaliencyMaps = SaliencyMaps()
+        for activation in ctx.activations:
+            fake: Tensor = torch.ones_like(activation).to(self.device)
+            fake[:, :, 0, 0] = 0.0  # set 0 to the top-left corner
+            fake_smaps.append(fake)
+        fake_smaps.finalize()
+        return fake_smaps
+
+    def _activation_weight_none(
+        self: ActivationWeight,
+        ctx: Context,
+    ) -> Weights:
+        """returns the dummy weight (each values of weight = 1).
 
         Args:
             ctx (Context): the context of this process.
@@ -55,20 +78,17 @@ class RawSMAPS(CommonSMAP):
         weights.finalize()
         return weights
 
-    def _class_weights(self: RawSMAPS, ctx: Context) -> Weights:
-        """CAM
-
-        B. Zhou, et al.
-        "Learning Deep Features for Discriminative Localization"
-        CVPR 2016.
-
-        https://arxiv.org/abs/1512.04150
+    def _activation_weight_class(
+        self: ActivationWeight,
+        ctx: Context,
+    ) -> Weights:
+        """use the weight of the target label in the classifier part in CNN
 
         Args:
             ctx (Context): the context of this process.
 
         Returns:
-            Weights: the weight retrieve from weights of the classifier part.
+            Weights: the weight.
         """
         weights: Weights = Weights()
         weights.append(
@@ -79,21 +99,17 @@ class RawSMAPS(CommonSMAP):
         weights.finalize()
         return weights
 
-    def _grad_weights(self: RawSMAPS, ctx: Context) -> Weights:
-        """Grad-CAM
-
-        R. Selvaraju, et al.
-        "Grad-CAM:
-        Visual Explanations from Deep Networks via Gradient-based Localization"
-        ICCV 2017.
-
-        https://arxiv.org/abs/1610.02391
+    def _activation_weight_gradient(
+        self: ActivationWeight,
+        ctx: Context,
+    ) -> Weights:
+        """use the gradient.
 
         Args:
             ctx (Context): the context of this process.
 
         Returns:
-            Weights: gradients.
+            Weights: the gradient.
         """
         weights: Weights = Weights()
         for gradient in ctx.gradients:
@@ -101,13 +117,11 @@ class RawSMAPS(CommonSMAP):
         weights.finalize()
         return weights
 
-    def _grad_pp_weights(self: RawSMAPS, ctx: Context) -> Weights:
-        """Grad-CAM++
-
-        A. Chattopadhyay, et al.
-        "Grad-CAM++:
-        Improved Visual Explanations for Deep Convolutional Networks"
-        WACV 2018.
+    def _activation_weight_gradient_pp(
+        self: ActivationWeight,
+        ctx: Context,
+    ) -> Weights:
+        """use smoothed gradient whose 2nd derivative becomes 0.
 
         Args:
             ctx (Context): the context of this process.
@@ -136,21 +150,17 @@ class RawSMAPS(CommonSMAP):
         weights.finalize()
         return weights
 
-    def _grad_axiom_weights(self: RawSMAPS, ctx: Context) -> Weights:
-        """XGrad-CAM
-
-        R. Fu, et al.
-        "Axiom-based Grad-CAM:
-        Towards Accurate Visualization and Explanation of CNNs"
-        BMVC 2020.
-
-        https://arxiv.org/abs/2008.02312
+    def _activation_weight_axiom(
+        self: ActivationWeight,
+        ctx: Context,
+    ) -> Weights:
+        """use gradient * activation.
 
         Args:
             ctx (Context): the context of this process.
 
         Returns:
-            Weights: gradient x activation
+            Weights: gradient * activation.
         """
         weights: Weights = Weights()
         for activation, gradient in zip(ctx.activations, ctx.gradients):
@@ -158,32 +168,40 @@ class RawSMAPS(CommonSMAP):
         weights.finalize()
         return weights
 
-    def create_raw_smaps(self: RawSMAPS, ctx: Context) -> SaliencyMaps:
-        """
+    # ## main function
+
+    def weight_activation(
+        self: ActivationWeight,
+        ctx: Context,
+    ) -> SaliencyMaps:
+        """weight activation.
         Args:
             ctx (Context): the context of this process.
 
         Returns:
-            Tuple[Forwarded, SaliencyMaps]: forwarded and gradient saliency map
+            SaliencyMaps: weighted activation = saliency map
         """
-        # get gradient weights
+        # special case
+        if self.activation_weight == "fake":
+            return self._fake_smaps(ctx=ctx)
+        # get weight for activation
         fn: Callable[[Context], Weights]
         if self.activation_weight == "none":
-            fn = self._dummy_weights
+            fn = self._activation_weight_none
         elif self.activation_weight == "class":
-            fn = self._class_weights
+            fn = self._activation_weight_class
         elif self.activation_weight == "gradient":
-            fn = self._grad_weights
+            fn = self._activation_weight_gradient
         elif self.activation_weight == "gradient++":
-            fn = self._grad_pp_weights
+            fn = self._activation_weight_gradient_pp
         elif self.activation_weight == "axiom":
-            fn = self._grad_axiom_weights
+            fn = self._activation_weight_axiom
         else:
             raise NotImplementedError(
                 f"activation weight is invalid: {self.activation_weight}"
             )
         source: Weights = fn(ctx=ctx)
-        # GAP (global average pooling) of gradient weights
+        # GAP (global average pooling) weight
         weights: Weights
         if self.gradient_gap_:
             weights = Weights()
@@ -195,13 +213,9 @@ class RawSMAPS(CommonSMAP):
             weights.finalize()
             source.clear()
         else:
-            # HiRes-CAM
-            # R. Draelos, et al.
-            # "Use HiResCAM instead of Grad-CAM
-            #  for faithful explanations of convolutional neural networks"
-            # arXiv 2020.
+            # do nothing on purpose
             weights = source
-        # create raw saliency maps by multiplying weights and activations
+        # create saliency maps by multiplying weight and activation
         raw_smaps: SaliencyMaps = SaliencyMaps()
         for weight, activation in zip(weights, ctx.activations):
             raw_smaps.append(smap=weight * activation)

@@ -19,7 +19,7 @@ from cam.base import (
     batch_shape,
     channel_shape,
     position_shape,
-    CommonSMAP,
+    CommonWeight,
 )
 from cam.base.containers import Weights, Activations, Gradients
 from cam.base.acquired import (
@@ -30,7 +30,7 @@ from cam.base.acquired import (
 from cam.utils.display import show_table
 
 
-class Network(CommonSMAP):
+class NetworkWeight(CommonWeight):
     """A part of the CAM model that is responsible for the CNN model.
 
     CNN (Convolutional Neuarl Network) models included in
@@ -99,7 +99,7 @@ class Network(CommonSMAP):
     (self._create_class_weight())
     """
 
-    def __init__(self: Network, **kwargs: Any) -> None:
+    def __init__(self: NetworkWeight, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         # parameters
         self.batch_size_: int = kwargs["batch_size"]
@@ -145,7 +145,7 @@ class Network(CommonSMAP):
     # ## hook functions
 
     def _get_init_activation(
-        self: Network,
+        self: NetworkWeight,
         module: nn.Module,
         actv_input: Tuple[Tensor],
         actv_output: Tensor,
@@ -161,7 +161,7 @@ class Network(CommonSMAP):
         return
 
     def _get_activation(
-        self: Network,
+        self: NetworkWeight,
         module: nn.Module,
         actv_input: Tuple[Tensor],
         actv_output: Tensor,
@@ -179,7 +179,7 @@ class Network(CommonSMAP):
         return
 
     def _get_gradient(
-        self: Network,
+        self: NetworkWeight,
         module: nn.Module,
         grad_input: Tuple[Tensor],
         grad_output: Tuple[Tensor],
@@ -197,7 +197,7 @@ class Network(CommonSMAP):
         return
 
     def _hook_by_name(
-        self: Network,
+        self: NetworkWeight,
         name: str,
         forward_fn: str,
         backward_fn: Optional[str],
@@ -231,7 +231,7 @@ class Network(CommonSMAP):
             exec(cmnd)
         return
 
-    def _clear_cache(self: Network) -> None:
+    def _clear_cache(self: NetworkWeight) -> None:
         """clear all caches."""
         if self.init_activations_ is not None:
             self.init_activations_.clear()
@@ -251,14 +251,14 @@ class Network(CommonSMAP):
         self.target_layers_ = None
         return
 
-    def __delete__(self: Network) -> None:
+    def __delete__(self: NetworkWeight) -> None:
         """delete all caches."""
         self._clear_cache()
         return
 
     # ## fuctions for Conv. Layers information
 
-    def _get_conv_layers(self: Network) -> None:
+    def _get_conv_layers(self: NetworkWeight) -> None:
         """get names of the last Conv. Layers
         for each blocks in the feature part.
         """
@@ -332,14 +332,16 @@ class Network(CommonSMAP):
         self._clear_cache()
         return
 
-    def show_conv_layers(self: Network) -> None:
+    def show_conv_layers(self: NetworkWeight) -> None:
         """show information of Conv. Layers"""
         show_table(df=self.info_conv_layers_, index=False)
         return
 
     # ## register function for target Conv. Layer(s)
 
-    def _register_target(self: Network, target_layers: List[str]) -> None:
+    def _register_target(
+        self: NetworkWeight, target_layers: List[str]
+    ) -> None:
         """hook functions to target Conv. Layers.
 
         Args:
@@ -365,7 +367,7 @@ class Network(CommonSMAP):
 
     # ## functions about weights of the classifier part of CNN
 
-    def _get_avgpool_size(self: Network) -> int:
+    def _get_avgpool_size(self: NetworkWeight) -> int:
         """calc the output size of the avgpool part.
 
         Returns:
@@ -379,7 +381,7 @@ class Network(CommonSMAP):
                 avgpool_size *= size
         return avgpool_size
 
-    def get_class_weights(self: Network) -> Tensor:
+    def get_class_weights(self: NetworkWeight) -> Tensor:
         """calc the weight of Linear Layer of the classifier part.
 
         Returns:
@@ -430,7 +432,7 @@ class Network(CommonSMAP):
 
     # ## forward functions
 
-    def _forward_batches(self: Network, image: Tensor) -> Tensor:
+    def _forward_batches(self: NetworkWeight, image: Tensor) -> Tensor:
         """forward image to CNN for each batches.
 
         Args:
@@ -444,7 +446,7 @@ class Network(CommonSMAP):
             scores: Tensor = self.softmax_(self.net_.forward(image))
         return scores.clone().detach()
 
-    def forward(self: Network, image: Tensor) -> Tensor:
+    def forward(self: NetworkWeight, image: Tensor) -> Tensor:
         """forward image to CNN.
 
         Args:
@@ -479,7 +481,7 @@ class Network(CommonSMAP):
     # ## acquire functions
 
     def _simple_grad(
-        self: Network,
+        self: NetworkWeight,
         image: Tensor,
         label: int,
         smooth: str,
@@ -523,7 +525,7 @@ class Network(CommonSMAP):
         return merge_acquired_list(acquired_list=acquired_list)
 
     def _integrate_grad(
-        self: Network,
+        self: NetworkWeight,
         image: Tensor,
         label: int,
         smooth: str,
@@ -567,7 +569,7 @@ class Network(CommonSMAP):
         )
 
     def _smooth_grad(
-        self: Network,
+        self: NetworkWeight,
         image: Tensor,
         label: int,
         smooth: str,
@@ -615,7 +617,7 @@ class Network(CommonSMAP):
         )
 
     def acquires_grad(
-        self: Network,
+        self: NetworkWeight,
         target_layers: List[str],
         image: Tensor,
         label: int,
@@ -655,7 +657,7 @@ class Network(CommonSMAP):
     # ## classify functions
 
     def _classify_batches(
-        self: Network,
+        self: NetworkWeight,
         activation: Tensor,
     ) -> Tensor:
         """forward activation to the classifier part of CNN for each batches.
@@ -673,7 +675,7 @@ class Network(CommonSMAP):
         return scores.clone().detach()
 
     def classify(
-        self: Network,
+        self: NetworkWeight,
         activation: Tensor,
     ) -> Tensor:
         """forward activation to the classifier part of CNN.

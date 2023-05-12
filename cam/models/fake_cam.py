@@ -29,6 +29,6 @@ class FakeCAM(BaseCAM):
         super().__init__(
             name="Fake-CAM",
             backbone=backbone,
-            position_weight="fake",
+            activation_weight="fake",
         )
         return

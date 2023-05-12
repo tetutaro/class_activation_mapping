@@ -16,19 +16,19 @@ from cam.base import (
     batch_shape,
     channel_shape,
     position_shape,
-    CommonSMAP,
+    CommonWeight,
 )
 from cam.base.containers import SaliencyMaps
 from cam.base.context import Context
 
 
-class ChannelSMAPS(CommonSMAP):
+class ChannelWeight(CommonWeight):
     """A part of the CAM model that is responsible for channel saliency maps.
 
     XXX
     """
 
-    def __init__(self: ChannelSMAPS, **kwargs: Any) -> None:
+    def __init__(self: ChannelWeight, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         # store flags
         self.channel_weight: str = kwargs["channel_weight"]
@@ -43,7 +43,7 @@ class ChannelSMAPS(CommonSMAP):
     # ## functions to create channel group map (channel -> channel group)
 
     def _estimate_n_groups(
-        self: ChannelSMAPS,
+        self: ChannelWeight,
         features: np.ndarray,
     ) -> int:
         """automatically estimate an optimal number of groups.
@@ -85,7 +85,7 @@ class ChannelSMAPS(CommonSMAP):
         return n_groups
 
     def _channel_group_none(
-        self: ChannelSMAPS,
+        self: ChannelWeight,
         smap: Tensor,
         ctx: Context,
     ) -> Tensor:
@@ -101,7 +101,7 @@ class ChannelSMAPS(CommonSMAP):
         return torch.diag(torch.ones(channel_shape(smap))).to(self.device)
 
     def _channel_group_kmeans(
-        self: ChannelSMAPS,
+        self: ChannelWeight,
         smap: Tensor,
         ctx: Context,
     ) -> Tensor:
@@ -136,7 +136,7 @@ class ChannelSMAPS(CommonSMAP):
         return torch.tensor(group_weight_list).to(self.device)
 
     def _channel_group_spectral(
-        self: ChannelSMAPS,
+        self: ChannelWeight,
         smap: Tensor,
         ctx: Context,
     ) -> Tensor:
@@ -173,7 +173,7 @@ class ChannelSMAPS(CommonSMAP):
     # ## functions to create weight for each channel group
 
     def _channel_weight_none(
-        self: ChannelSMAPS,
+        self: ChannelWeight,
         g_smap: Tensor,
         gmap: Tensor,
         ctx: Context,
@@ -192,7 +192,7 @@ class ChannelSMAPS(CommonSMAP):
         return torch.where(gmap > 0, 1.0, 0.0).sum(dim=1) / channel_shape(gmap)
 
     def _channel_weight_eigen(
-        self: ChannelSMAPS,
+        self: ChannelWeight,
         g_smap: Tensor,
         gmap: Tensor,
         ctx: Context,
@@ -232,7 +232,7 @@ class ChannelSMAPS(CommonSMAP):
         return weight
 
     def _channel_weight_ablation(
-        self: ChannelSMAPS,
+        self: ChannelWeight,
         g_smap: Tensor,
         gmap: Tensor,
         ctx: Context,
@@ -268,7 +268,7 @@ class ChannelSMAPS(CommonSMAP):
         return (ctx.score - a_scores) / (ctx.score + self.eps)
 
     def _channel_weight_abscission(
-        self: ChannelSMAPS,
+        self: ChannelWeight,
         g_smap: Tensor,
         gmap: Tensor,
         ctx: Context,
@@ -346,35 +346,32 @@ class ChannelSMAPS(CommonSMAP):
 
     # ## main function
 
-    def create_channel_smaps(
-        self: ChannelSMAPS,
-        position_smaps: SaliencyMaps,
+    def weight_channel(
+        self: ChannelWeight,
+        smaps: SaliencyMaps,
         ctx: Context,
     ) -> SaliencyMaps:
-        """create channel saliency maps.
-
-        weight for each channels
-        and merge position saliency maps over channels.
+        """group and weight each channels and sum them up.
 
         Args:
-            position_smaps (SaliencyMaps): position saliency maps.
+            smaps (SaliencyMaps): saliency maps.
             ctx (Context): the context of this process.
 
         Returns:
-            SaliencyMaps: channel saliency maps.
+            SaliencyMaps: summed saliency maps.
         """
         if self.channel_weight == "abscission":
             # forcibly enlarge saliency maps to the original image size
-            position_smaps = ctx.enlarge_fn(smaps=position_smaps)
-        # create channel saliency map for each layers
-        channel_smaps: SaliencyMaps = SaliencyMaps()
-        for smap in position_smaps:
+            smaps = ctx.enlarge_fn(smaps=smaps)
+        # weight and merge channels for each layers
+        merged_smaps: SaliencyMaps = SaliencyMaps()
+        for smap in smaps:
             b, k, u, v = smap.size()
             if DEBUG:
                 assert b == 1
             if k == 1:
                 # channel saliency map is already created
-                channel_smaps.append(smap.clone())
+                merged_smaps.append(smap.clone())
                 continue
             # the function to create channel group map
             group_fn: Callable[[Tensor, Context], Tensor]
@@ -431,10 +428,10 @@ class ChannelSMAPS(CommonSMAP):
                 g_weight[base] = 1.0
                 g_weight[scis] = -1.0
             g_weight = g_weight.view(1, g, 1, 1)
-            channel_smaps.append(
+            merged_smaps.append(
                 smap=(g_weight * g_smap).sum(dim=1, keepdim=True)
             )
         # finelize
-        channel_smaps.finalize()
-        position_smaps.clear()
-        return channel_smaps
+        merged_smaps.finalize()
+        smaps.clear()
+        return merged_smaps

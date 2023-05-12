@@ -15,25 +15,22 @@ from cam.base import (
     target_names,
     smooth_types,
     activation_weights,
-    position_weights,
     channel_weights,
     group_types,
-    merge_layers,
     TargetLayer,
     batch_shape,
 )
 from cam.base.acquired import Acquired
 from cam.base.context import Context
 from cam.base.containers import SaliencyMaps
-from cam.base.network import Network
-from cam.base.raw_smaps import RawSMAPS
-from cam.base.position_smaps import PositionSMAPS
-from cam.base.channel_smaps import ChannelSMAPS
-from cam.base.final_smap import FinalSMAP
+from cam.base.network_weight import NetworkWeight
+from cam.base.activation_weight import ActivationWeight
+from cam.base.channel_weight import ChannelWeight
+from cam.base.layer_weight import LayerWeight
 from cam.utils.display import draw_image_heatmap
 
 
-class BaseCAM(Network, RawSMAPS, PositionSMAPS, ChannelSMAPS, FinalSMAP):
+class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
     """The base class for all CAM models.
 
     The aim of CAM model is to create a "Saliency Map" that represents
@@ -72,59 +69,44 @@ class BaseCAM(Network, RawSMAPS, PositionSMAPS, ChannelSMAPS, FinalSMAP):
         name (str): the name of this CAM model.
         backbone (Backbone): resource of the CNN model.
         activation_weight (str): the type of weights for each activations.
-        gradient_gap (bool): average weights over channels or not.
+        gradient_gap (bool): average weights over positions or not.
         gradient_smooth (str): the method of smoothing gradients.
-        position_weight (str): the method of weighting for each positions.
-        position_group (str): the method of creating groups.
         channel_weight (str): the method of weighting for each channels.
-        channel_group (bool): the method of creating groups.
-        merge_layer (str):
-            the method to merge channel saliency maps over layers.
-        batch_size (int): max number of images to forward images at once.
+        channel_group (str): the method of creating groups.
+        channel_minmax (bool): adopt only the best&worst channel group or not.
+        high_resolution (bool): produce high resolution heatmap or not.
+        sigma (float): sdev of Normal Dist. (use it in SmoothGrad)
+        batch_size (int): max number of images in a batch.
         n_divides (int): number of divides. (use it in IntegratedGrads)
         n_samples (int): number of samplings. (use it in SmoothGrad)
-        n_positions (int): the max number of culculate abscissions.
-        n_position_groups (Optional[int]): the number of positional clusters.
-        position_minmax (bool):
-            activate the best position group (cognition base)
-            and inactivate the worst one (cognition scissors).
-        n_channels (int): the max number of culculate abscissions.
-        n_channel_groups (Optional[int]): the number of channel clusters.
-        channel_minmax (bool):
-            activate the best channel group (cognition base)
-            and inactivate the worst one (cognition scissors).
-        sigma (float): sdev of Normal Dist. (use it in SmoothGrad)
+        n_channels (int): the number of abscission channel groups to calc.
+        n_channel_groups (Optional[int]): the number of channel groups.
         random_state (Optional[int]): the random seed.
     """
 
     def __init__(
         self: BaseCAM,
+        # settings for itself
         name: str,
-        # settings of CNN
+        # settings for NetworkWeight
         backbone: Backbone,
-        # settings for raw saliency maps
-        activation_weight: str = "none",
-        gradient_smooth: str = "none",
-        gradient_gap: bool = True,
-        # settings for position saliency maps
-        position_weight: str = "none",
-        position_group: str = "none",
-        # settings for channel saliency maps
-        channel_weight: str = "none",
-        channel_group: str = "none",
-        # settings for (final) saliency map
-        merge_layer: str = "none",
-        # parameters
         batch_size: int = 8,
         n_divides: int = 8,
         n_samples: int = 8,
-        n_positions: int = -1,
-        n_position_groups: Optional[int] = None,
-        position_minmax: bool = False,
+        sigma: float = 0.3,
+        # settings for ActivationWeight
+        activation_weight: str = "none",
+        gradient_smooth: str = "none",
+        gradient_gap: bool = True,
+        # settings for ChannelWeight
+        channel_weight: str = "none",
+        channel_group: str = "none",
         n_channels: int = -1,
         n_channel_groups: Optional[int] = None,
         channel_minmax: bool = False,
-        sigma: float = 0.3,
+        # settings for LayerWeight
+        high_resolution: bool = False,
+        # settings for CommonWeight
         random_state: Optional[int] = None,
     ) -> None:
         # initialize flags
@@ -134,21 +116,16 @@ class BaseCAM(Network, RawSMAPS, PositionSMAPS, ChannelSMAPS, FinalSMAP):
             activation_weight=activation_weight,
             gradient_gap=gradient_gap,
             gradient_smooth=gradient_smooth,
-            position_weight=position_weight,
-            position_group=position_group,
             channel_weight=channel_weight,
             channel_group=channel_group,
-            merge_layer=merge_layer,
+            channel_minmax=channel_minmax,
+            high_resolution=high_resolution,
+            sigma=sigma,
             batch_size=batch_size,
             n_divides=n_divides,
             n_samples=n_samples,
-            n_positions=n_positions,
-            n_position_groups=n_position_groups,
-            position_minmax=position_minmax,
             n_channels=n_channels,
             n_channel_groups=n_channel_groups,
-            channel_minmax=channel_minmax,
-            sigma=sigma,
             random_state=random_state,
             **backbone,
         )
@@ -158,7 +135,7 @@ class BaseCAM(Network, RawSMAPS, PositionSMAPS, ChannelSMAPS, FinalSMAP):
         if activation_weight == "class":
             self.target_last_layer_ = True
             self.set_class_weights(class_weights=self.get_class_weights())
-        if (position_weight == "ablation") or (channel_weight == "ablation"):
+        if channel_weight == "ablation":
             self.target_last_layer_ = True
         # the name of CAM model
         self.name_ = name
@@ -198,23 +175,10 @@ class BaseCAM(Network, RawSMAPS, PositionSMAPS, ChannelSMAPS, FinalSMAP):
             _raise_error(name="avtivation_weight")
         if self.gradient_smooth not in smooth_types:
             _raise_error(name="gradient_smooth")
-        if self.position_weight not in position_weights:
-            _raise_error(name="position_weight")
-        if self.position_group not in group_types:
-            _raise_error(name="position_group")
         if self.channel_weight not in channel_weights:
             _raise_error(name="channel_weight")
         if self.channel_group not in group_types:
             _raise_error(name="channel_group")
-        if self.merge_layer not in merge_layers:
-            _raise_error(name="merge_layer")
-        if (
-            (self.position_weight == "abscission")
-            or (self.channel_weight == "abscission")
-        ) and (self.merge_layer == "multiply"):
-            raise ValueError(
-                'if merge_leyer=="multiply", do not use "abscission"'
-            )
         return
 
     def _convert_target(self: BaseCAM, target: TargetLayer) -> None:
@@ -349,28 +313,16 @@ class BaseCAM(Network, RawSMAPS, PositionSMAPS, ChannelSMAPS, FinalSMAP):
         )
         acquired.clear()
         # weight the weights made from gradients (etc...) to activations
-        # -> raw saliency maps
-        raw_smaps: SaliencyMaps = self.create_raw_smaps(ctx=ctx)
-        # weight position-wise weights to raw salincy maps
-        # -> position saliency maps
-        position_smaps: SaliencyMaps = self.create_position_smaps(
-            raw_smaps=raw_smaps, ctx=ctx
-        )
+        smaps: SaliencyMaps = self.weight_activation(ctx=ctx)
         # weight channel-wise weights and merge over channels
-        # -> channel saliency maps
-        channel_smaps: SaliencyMaps = self.create_channel_smaps(
-            position_smaps=position_smaps, ctx=ctx
-        )
-        # merge channel saliency maps over layers
-        # -> final saliency map
-        final_smap: Tensor = self.create_final_smap(
-            channel_smaps=channel_smaps, ctx=ctx
-        )
+        smaps = self.weight_channel(smaps=smaps, ctx=ctx)
+        # merge over layers
+        smap: Tensor = self.weight_layer(smaps=smaps, ctx=ctx)
         # convert final saliency map (Tensor) to heatmap (numpy.ndarray)
-        heatmap: np.ndarray = final_smap.detach().cpu().numpy()
+        heatmap: np.ndarray = smap.detach().cpu().numpy()
         if DEBUG:
             assert heatmap.shape == (ctx.height, ctx.width)
-        del final_smap
+        del smap
         # normalize heatmap
         heatmap = heatmap / heatmap.max()
         if draw_negative:
