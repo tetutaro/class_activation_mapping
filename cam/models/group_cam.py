@@ -10,9 +10,11 @@ from cam.backbones.backbone import Backbone
 class GroupCAM(BaseCAM):
     """Group-CAM
 
+    Q. Zhang, et al.
     "Group-CAM:
     Group Score-Weighted Visual Explanations
     for Deep Convolutional Networks"
+    arXiv 2021.
 
     https://arxiv.org/abs/2103.13859
 
@@ -23,6 +25,8 @@ class GroupCAM(BaseCAM):
     def __init__(
         self: GroupCAM,
         backbone: Backbone,
+        n_channels: int = -1,
+        n_channel_groups: Optional[int] = None,
         random_state: Optional[int] = None,
         **kwargs: Any,
     ) -> None:
@@ -32,6 +36,8 @@ class GroupCAM(BaseCAM):
             activation_weight="gradient",
             channel_weight="abscission",
             channel_group="k-means",
+            n_channels=n_channels,
+            n_channel_groups=n_channel_groups,
             random_state=random_state,
         )
         return

@@ -12,7 +12,9 @@ class InteGradCAM(BaseCAM):
 
     IntegratedGrad + Grad-CAM
 
+    M. Sundararajan, et al.
     "Axiomatic Attribution for Deep Networks" (IntegratedGrad)
+    ICML 2017.
 
     https://arxiv.org/abs/1703.01365
 

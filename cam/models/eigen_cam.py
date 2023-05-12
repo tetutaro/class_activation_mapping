@@ -10,8 +10,10 @@ from cam.backbones.backbone import Backbone
 class EigenCAM(BaseCAM):
     """Eigen-CAM
 
+    M. Muhammad, et al.
     "Eigen-CAM:
     Class Activation Map using Principal Components"
+    IJCNN 2020.
 
     https://arxiv.org/abs/2008.00299
 

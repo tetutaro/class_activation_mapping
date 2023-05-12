@@ -10,8 +10,10 @@ from cam.backbones.backbone import Backbone
 class GradCAM(BaseCAM):
     """Grad-CAM
 
+    R. Selvaraju, et al.
     "Grad-CAM:
     Visual Explanations from Deep Networks via Gradient-based Localization"
+    ICCV 2017.
 
     https://arxiv.org/abs/1610.02391
 

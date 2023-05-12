@@ -10,7 +10,9 @@ from cam.backbones.backbone import Backbone
 class GradCAMpp(BaseCAM):
     """Grad-CAM++
 
+    A. Chattopadhyay, et al.
     "Grad-CAM++: Improved Visual Explanations for Deep Convolutional Networks"
+    WACV 2018.
 
     https://arxiv.org/abs/1710.11063
 

@@ -10,9 +10,11 @@ from cam.backbones.backbone import Backbone
 class SmoothGradCAMpp(BaseCAM):
     """Smooth Grad-CAM++
 
+    D. Omeiza, et al.
     "Smooth Grad-CAM++:
     An Enhanced Inference Level Visualization Technique
     for Deep Convolutional Neural Network Models"
+    IntelliSys 2019.
 
     https://arxiv.org/abs/1908.01224
 

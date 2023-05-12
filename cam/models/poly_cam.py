@@ -10,10 +10,12 @@ from cam.backbones.backbone import Backbone
 class PolyCAM(BaseCAM):
     """Poly-CAM
 
-    "LayerCAM:
-    Exploring Hierarchical Class Activation Maps for Localization"
+    A. Englebert, et al.
+    "Poly-CAM:
+    High resolution class activation map for convolutional neural networks"
+    ICPR 2022.
 
-    https://mmcheng.net/mftp/Papers/21TIP_LayerCAM.pdf
+    https://arxiv.org/abs/2204.13359
 
     Args:
         backbone (Backbone): resouce of CNN.

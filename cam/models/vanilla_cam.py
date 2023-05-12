@@ -10,7 +10,9 @@ from cam.backbones.backbone import Backbone
 class VanillaCAM(BaseCAM):
     """CAM
 
+    B. Zhou, et al.
     "Learning Deep Features for Discriminative Localization"
+    CVPR 2016.
 
     https://arxiv.org/abs/1512.04150
 

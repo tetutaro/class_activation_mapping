@@ -10,8 +10,10 @@ from cam.backbones.backbone import Backbone
 class FakeCAM(BaseCAM):
     """Fake-CAM
 
-    Revisiting The Evaluation of Class Activation Mapping for Explainability:
-    A Novel Metric and Experimental Analysis
+    S. Poppi, et al.
+    "Revisiting The Evaluation of Class Activation Mapping for Explainability:
+    A Novel Metric and Experimental Analysis"
+    CVPR 2021.
 
     https://arxiv.org/abs/2104.10252
 

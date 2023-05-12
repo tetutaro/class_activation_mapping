@@ -10,10 +10,19 @@ from cam.backbones.backbone import Backbone
 class ScoreCAM(BaseCAM):
     """Score-CAM
 
+    H. Wang, et al.
     "Score-CAM:
     Score-Weighted Visual Explanations for Convolutional Neural Networks"
+    CVF 2020.
 
     https://arxiv.org/abs/1910.01279
+
+    SIGCAM
+
+    Q. Zhang, et al.
+    "A Novel Visual Interpretability for Deep Neural Networks
+    by Optimizing Activation Maps with Perturbation"
+    AAAI 2021.
 
     Args:
         backbone (Backbone): resouce of CNN.

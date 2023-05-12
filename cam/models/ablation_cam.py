@@ -10,9 +10,11 @@ from cam.backbones.backbone import Backbone
 class AblationCAM(BaseCAM):
     """Ablation-CAM
 
+    H. Ramaswamy, et al.
     "Ablation-CAM:
     Visual Explanations for Deep Convolutional Network
     via Gradient-free Localization"
+    WACV 2020.
 
     https://openaccess.thecvf.com/content_WACV_2020/html/Desai_Ablation-CAM_Visual_Explanations_for_Deep_Convolutional_Network_via_Gradient-free_Localization_WACV_2020_paper.html
 

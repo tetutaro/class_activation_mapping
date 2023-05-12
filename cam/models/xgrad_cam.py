@@ -10,8 +10,10 @@ from cam.backbones.backbone import Backbone
 class XGradCAM(BaseCAM):
     """XGrad-CAM
 
+    R. Fu, et al.
     "Axiom-based Grad-CAM:
     Towards Accurate Visualization and Explanation of CNNs"
+    BMVC 2020.
 
     https://arxiv.org/abs/2008.02312
 

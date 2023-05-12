@@ -10,8 +10,10 @@ from cam.backbones.backbone import Backbone
 class HiResCAM(BaseCAM):
     """HiRes-CAM
 
+    R. Draelos, et al.
     "Use HiResCAM instead of Grad-CAM
     for faithful explanations of convolutional neural networks"
+    arXiv 2020.
 
     https://arxiv.org/abs/2011.08891
 
