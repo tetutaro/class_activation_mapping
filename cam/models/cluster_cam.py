@@ -26,7 +26,7 @@ class ClusterCAM(BaseCAM):
         self: ClusterCAM,
         backbone: Backbone,
         n_channels: int = -1,
-        n_channel_groups: Optional[int] = None,
+        n_groups: Optional[int] = None,
         random_state: Optional[int] = None,
         **kwargs: Any,
     ) -> None:
@@ -38,7 +38,7 @@ class ClusterCAM(BaseCAM):
             channel_group="spectral",
             channel_minmax=True,
             n_channels=n_channels,
-            n_channel_groups=n_channel_groups,
+            n_groups=n_groups,
             random_state=random_state,
         )
         return

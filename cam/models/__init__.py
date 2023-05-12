@@ -17,6 +17,7 @@ from cam.models.layer_cam import LayerCAM
 from cam.models.group_cam import GroupCAM
 from cam.models.cluster_cam import ClusterCAM
 from cam.models.poly_cam import PolyCAM
+from cam.models.cosine_cam import CosineCAM
 
 # from cam.models.ablation_cam import AblationCAM
 
@@ -38,4 +39,5 @@ __all__ = [
     "GroupCAM",
     "ClusterCAM",
     "PolyCAM",
+    "CosineCAM",
 ]

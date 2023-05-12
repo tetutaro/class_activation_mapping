@@ -34,13 +34,39 @@ class ChannelWeight(CommonWeight):
         self.channel_weight: str = kwargs["channel_weight"]
         self.channel_group: str = kwargs["channel_group"]
         self.n_channels_: int = kwargs["n_channels"]
-        self.n_channel_groups_: Optional[int] = kwargs["n_channel_groups"]
+        self.n_groups_: Optional[int] = kwargs["n_groups"]
+        self.channel_cosine_: bool = kwargs["channel_cosine"]
         self.channel_minmax_: bool = kwargs["channel_minmax"]
         if self.channel_weight == "none":
             self.channel_minmax_ = False
         return
 
     # ## functions to create channel group map (channel -> channel group)
+
+    def _create_features(
+        self: ChannelWeight,
+        smap: Tensor,
+    ) -> np.ndarray:
+        """create feature matrix to clustering channels.
+
+        Args:
+            smap (Tensor): the saliemcy map (1 x channel x height x width).
+
+        Returns:
+            np.ndarray:
+                feature matrix (channel x position).
+                (position = height * width)
+        """
+        k: int = channel_shape(smap)
+        # create channel x position matrix
+        CP: Tensor = smap.view(k, -1)
+        if not self.channel_cosine_:
+            return CP.detach().cpu().numpy()
+        CP_std: Tensor = (CP - CP.mean()) / CP.std()
+        # SVD (singular value decomposition)
+        # Cs = channel space
+        Cs, _, _ = torch.linalg.svd(CP_std, full_matrices=False)
+        return F.normalize(Cs.real, dim=1).detach().cpu().numpy()
 
     def _estimate_n_groups(
         self: ChannelWeight,
@@ -114,23 +140,26 @@ class ChannelWeight(CommonWeight):
         Returns:
             Tensor: channel group map (group x channel).
         """
-        # create features to create channel group map
-        k: int = channel_shape(smap)
-        features: np.ndarray = smap.view(k, -1).detach().cpu().numpy()
-        if self.n_channel_groups_ is None:
+        # create features to cluster channels
+        features: np.ndarray = self._create_features(smap=smap)
+        if self.n_groups_ is None:
             # estimate the optimal number of groups
-            self.n_channel_groups_ = self._estimate_n_groups(features=features)
-        # cluster the data using k-Means
-        km: KMeans = KMeans(
-            n_clusters=self.n_channel_groups_,
-            init="k-means++",
-            n_init="auto",
-            random_state=self.random_state,
-        ).fit(features)
+            self.n_groups_ = self._estimate_n_groups(features=features)
+        # cluster channels using k-Means
+        labels: np.ndarray = (
+            KMeans(
+                n_clusters=self.n_groups_,
+                init="k-means++",
+                n_init="auto",
+                random_state=self.random_state,
+            )
+            .fit_predict(features)
+            .reshape(-1)
+        )
         # create group map
         group_weight_list: List[List[float]] = list()
-        for group in range(self.n_channel_groups_):
-            group_weight: np.ndarray = np.where(km.labels_ == group, 1.0, 0.0)
+        for group in range(self.n_groups_):
+            group_weight: np.ndarray = np.where(labels == group, 1.0, 0.0)
             group_weight /= group_weight.sum()
             group_weight_list.append(group_weight.tolist())
         return torch.tensor(group_weight_list).to(self.device)
@@ -149,23 +178,28 @@ class ChannelWeight(CommonWeight):
         Returns:
             Tensor: channel group map (group x channel).
         """
-        # create features to create channel group map
-        k: int = channel_shape(smap)
-        features: np.ndarray = smap.view(k, -1).detach().cpu().numpy()
-        if self.n_channel_groups_ is None:
+        # create features to cluster channels
+        features: np.ndarray = self._create_features(smap=smap)
+        if self.n_groups_ is None:
             # estimate the optimal number of groups
-            self.n_channel_groups_ = self._estimate_n_groups(features=features)
-        # cluster the data using Spectral Clustering
-        sc: SpectralClustering = SpectralClustering(
-            n_clusters=self.n_channel_groups_,
-            affinity="nearest_neighbors",
-            n_jobs=-1,
-            random_state=self.random_state,
-        ).fit(features)
+            self.n_groups_ = self._estimate_n_groups(features=features)
+        # cluster channels using Spectral Clustering
+        with catch_warnings():
+            filterwarnings("ignore", category=UserWarning)
+            labels: np.ndarray = (
+                SpectralClustering(
+                    n_clusters=self.n_groups_,
+                    affinity="nearest_neighbors",
+                    n_jobs=-1,
+                    random_state=self.random_state,
+                )
+                .fit_predict(features)
+                .reshape(-1)
+            )
         # create group map
         group_weight_list: List[List[float]] = list()
-        for group in range(self.n_channel_groups_):
-            group_weight: np.ndarray = np.where(sc.labels_ == group, 1.0, 0.0)
+        for group in range(self.n_groups_):
+            group_weight: np.ndarray = np.where(labels == group, 1.0, 0.0)
             group_weight /= group_weight.sum()
             group_weight_list.append(group_weight.tolist())
         return torch.tensor(group_weight_list).to(self.device)

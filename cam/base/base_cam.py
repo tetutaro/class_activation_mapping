@@ -68,19 +68,20 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
     Args:
         name (str): the name of this CAM model.
         backbone (Backbone): resource of the CNN model.
-        activation_weight (str): the type of weights for each activations.
-        gradient_gap (bool): average weights over positions or not.
-        gradient_smooth (str): the method of smoothing gradients.
+        activation_weight (str): the type of weight for each activations.
+        gradient_gap (bool): if True, average activation weight over positions.
+        gradient_smooth (str): the method of smoothing gradient.
         channel_weight (str): the method of weighting for each channels.
         channel_group (str): the method of creating groups.
-        channel_minmax (bool): adopt only the best&worst channel group or not.
-        high_resolution (bool): produce high resolution heatmap or not.
+        channel_cosine (bool): if True, use cosine distance at clustering.
+        channel_minmax (bool): if True, adopt the best&worst channel only.
+        high_resolution (bool): if True, produce high resolution heatmap.
         sigma (float): sdev of Normal Dist. (use it in SmoothGrad)
         batch_size (int): max number of images in a batch.
         n_divides (int): number of divides. (use it in IntegratedGrads)
         n_samples (int): number of samplings. (use it in SmoothGrad)
         n_channels (int): the number of abscission channel groups to calc.
-        n_channel_groups (Optional[int]): the number of channel groups.
+        n_groups (Optional[int]): the number of channel groups.
         random_state (Optional[int]): the random seed.
     """
 
@@ -102,7 +103,8 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
         channel_weight: str = "none",
         channel_group: str = "none",
         n_channels: int = -1,
-        n_channel_groups: Optional[int] = None,
+        n_groups: Optional[int] = None,
+        channel_cosine: bool = False,
         channel_minmax: bool = False,
         # settings for LayerWeight
         high_resolution: bool = False,
@@ -118,6 +120,7 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
             gradient_smooth=gradient_smooth,
             channel_weight=channel_weight,
             channel_group=channel_group,
+            channel_cosine=channel_cosine,
             channel_minmax=channel_minmax,
             high_resolution=high_resolution,
             sigma=sigma,
@@ -125,7 +128,7 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
             n_divides=n_divides,
             n_samples=n_samples,
             n_channels=n_channels,
-            n_channel_groups=n_channel_groups,
+            n_groups=n_groups,
             random_state=random_state,
             **backbone,
         )
