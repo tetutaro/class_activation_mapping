@@ -133,33 +133,44 @@ class LimeImage(NetworkWeight):
         show_text("\n".join([str(pred) for pred in self.preds_]))
         return
 
-    def draw_boundary(self: LimeImage) -> None:
-        """draw boundary"""
+    def draw_boundary(self: LimeImage, ax: mpl.axes.Axes) -> None:
+        """draw boundary
+
+        Args:
+            ax (mpl.axes.Axes): the Axes instance.
+        """
         draw_image_boundary(
             image=self.explain_.image,
             boundary=self.explain_.segments,
             title="Segment Boundary",
+            ax=ax,
         )
         return
 
     def draw(
         self: LimeImage,
+        fig: mpl.figure.Figure,
+        ax: mpl.axes.Axes,
         rank: Optional[int] = None,
         label: Optional[int] = None,
         draw_negative: bool = False,
-        fig: Optional[mpl.figure.Figure] = None,
-        ax: Optional[mpl.axes.Axes] = None,
+        draw_colorbar: bool = False,
+        title: Optional[str] = None,
+        title_model: bool = False,
+        title_label: bool = False,
     ) -> None:
         """the main function.
 
         Args:
             rank (Optional[int]): the rank of the target class.
             label (Optional[int]): the label of the target class.
+            fig (Optional[mpl.figure.Figure]): the Figure instance.
+            ax (Optinonal[mpl.axies.Axes): the Axes instance.
             draw_negative (bool): draw negative regions.
-            fig (Optional[mpl.figure.Figure]):
-                the Figure instance that the output image is drawn.
-            ax (Optinonal[mpl.axies.Axes):
-                the Axes instance that the output image is drawn.
+            draw_colorbar (bool): draw colorbar.
+            title (Optional[str]): title of heatmap.
+            title_model (bool): show model name in title.
+            title_label (bool): show label name in title.
         """
         if rank is None and label is None:
             rank = 0
@@ -182,16 +193,22 @@ class LimeImage(NetworkWeight):
         else:
             heatmap = heatmap.clip(min=0.0, max=1.0)
         # create title
-        title: str = "LIME"
-        if fig is None or ax is None:
-            title += f" ({self.labels[self.explain_.top_labels[rank]]})"
+        if title is None:
+            label_name: str = self.labels[self.explain_.top_labels[rank]]
+            if title_model:
+                title = "LIME"
+                if title_label:
+                    title += f" ({label_name})"
+            elif title_label:
+                title = label_name
         # draw
         draw_image_heatmap(
             image=self.explain_.image,
             heatmap=heatmap,
             title=title,
-            draw_negative=draw_negative,
             fig=fig,
             ax=ax,
+            draw_negative=draw_negative,
+            draw_colorbar=draw_colorbar,
         )
         return

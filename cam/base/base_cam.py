@@ -238,24 +238,32 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
         self: BaseCAM,
         path: str,
         target: TargetLayer,
+        fig: mpl.figure.Figure,
+        ax: mpl.axes.Axes,
         rank: Optional[int] = None,
         label: Optional[int] = None,
         draw_negative: bool = False,
-        fig: Optional[mpl.figure.Figure] = None,
-        ax: Optional[mpl.axes.Axes] = None,
+        draw_colorbar: bool = False,
+        title: Optional[str] = None,
+        title_model: bool = False,
+        title_label: bool = False,
+        title_score: bool = False,
     ) -> None:
         """the main function.
 
         Args:
             path (str): the pathname of the original image.
             target (TargetLayer): target Conv. Layers to retrieve activations.
+            fig (mpl.figure.Figure): the Figure instance.
+            ax (mpl.axies.Axes): the Axes instance.
             rank (Optional[int]): the rank of the target class.
             label (Optional[int]): the label of the target class.
             draw_negative (bool): draw negative regions or not.
-            fig (Optional[mpl.figure.Figure]):
-                the Figure instance that the output image is drawn.
-            ax (Optinonal[mpl.axies.Axes):
-                the Axes instance that the output image is drawn.
+            draw_colorbar (bool): draw colorbar.
+            title (Optional[str]): title of heatmap.
+            title_model (bool): show model name in title.
+            title_label (bool): show label name in title.
+            title_score (bool): show label name in title.
         """
         # convert target to List[str]
         target_layers: List[str] = self._convert_target(target=target)
@@ -333,17 +341,25 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
         else:
             heatmap = heatmap.clip(min=0.0, max=1.0)
         # title
-        title: str = f"{self.name_}"
-        if fig is None or ax is None:
-            title += f" ({self.labels[ctx.label]})"
+        if title is None:
+            label_name: str = self.labels[ctx.label]
+            if title_score:
+                label_name += f" ({ctx.score:.4f})"
+            if title_model:
+                title = self.name_
+                if title_label:
+                    title += f" ({label_name})"
+            elif title_label:
+                title = label_name
         # draw the heatmap
-        draw_image_heatmap(
+        fig = draw_image_heatmap(
             image=ctx.raw_image,
             heatmap=heatmap,
             title=title,
-            draw_negative=draw_negative,
             fig=fig,
             ax=ax,
+            draw_negative=draw_negative,
+            draw_colorbar=draw_colorbar,
         )
         # clear cache
         ctx.clear()

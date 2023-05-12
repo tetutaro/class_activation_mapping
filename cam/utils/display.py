@@ -9,7 +9,6 @@ from IPython.display import display, Markdown
 from IPython import get_ipython
 from PIL import Image
 import matplotlib as mpl
-import matplotlib.pyplot as plt
 from skimage.segmentation import mark_boundaries
 
 
@@ -58,8 +57,7 @@ def draw_image_boundary(
     image: np.ndarray,
     boundary: np.ndarray,
     title: str,
-    fig: Optional[mpl.figure.Figure] = None,
-    ax: Optional[mpl.axes.Axes] = None,
+    ax: mpl.axes.Axes,
 ) -> None:
     """draw the original image and its boundaries of segments.
 
@@ -67,49 +65,34 @@ def draw_image_boundary(
         image (np.ndarray): the original image.
         boundary (np.ndarray): boundaries.
         titie (str): the title of the image.
-        fig (Optional[mpl.figure.Figure]):
-            the Figure instance that the output image is drawn.
-            if None, create it inside this function.
-        ax (Optinonal[mpl.axies.Axes):
-            the Axes instance that the output image is drawn.
-            if None, create it inside this function.
+        fig (mpl.figure.Figure): the Figure instance.
+        ax (mpl.axies.Axes): the Axes instance.
     """
-    show: bool = False
-    if fig is None or ax is None:
-        fig, ax = plt.subplots(figsize=(5, 5))
-        show = True
     ax.imshow(mark_boundaries(image, boundary))
     ax.set_title(title)
     ax.set_axis_off()
-    if show:
-        plt.tight_layout()
-        plt.show()
-        plt.clf()
-        plt.close()
     return
 
 
 def draw_image_heatmap(
     image: Image,
     heatmap: np.ndarray,
-    title: str,
+    title: Optional[str],
+    fig: mpl.figure.Figure,
+    ax: mpl.axes.Axes,
     draw_negative: bool = False,
-    fig: Optional[mpl.figure.Figure] = None,
-    ax: Optional[mpl.axes.Axes] = None,
+    draw_colorbar: bool = False,
 ) -> None:
     """draw the original image and the heatmap over the original image.
 
     Args:
         image (np.ndarray): the original image.
         heatmap (np.ndarray): the heatmap.
-        titie (str): the title of the image.
+        titie (Optional[str]): the title of the image.
+        fig (mpl.figure.Figure): the Figure instance.
+        ax (mpl.axies.Axes): the Axes instance.
         draw_negative (bool): draw negative regions.
-        fig (Optional[mpl.figure.Figure]):
-            the Figure instance that the output image is drawn.
-            if None, create it inside this function.
-        ax (Optinonal[mpl.axies.Axes):
-            the Axes instance that the output image is drawn.
-            if None, create it inside this function.
+        draw_colorbar (bool): draw colorbar.
     """
     # check values of heatmap
     assert heatmap.max() <= 1.0
@@ -117,11 +100,6 @@ def draw_image_heatmap(
         assert heatmap.min() >= 0.0
     else:
         assert heatmap.min() >= -1.0
-    # create fig, ax if not exists
-    show: bool = False
-    if fig is None or ax is None:
-        fig, ax = plt.subplots(figsize=(5, 5))
-        show = True
     # draw original image
     ax.imshow(image)
     # draw overlay (heatmap)
@@ -134,12 +112,9 @@ def draw_image_heatmap(
         mappable = ax.imshow(
             heatmap, cmap="jet", vmin=0.0, vmax=1.0, alpha=0.5
         )
-    ax.set_title(title)
+    if title is not None:
+        ax.set_title(title)
     ax.set_axis_off()
-    if show:
-        fig.colorbar(mappable, ax=ax)
-        plt.tight_layout()
-        plt.show()
-        plt.clf()
-        plt.close()
+    if draw_colorbar:
+        fig.colorbar(mappable, ax=ax, shrink=0.8)
     return
