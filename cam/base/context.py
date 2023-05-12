@@ -64,7 +64,7 @@ class Context(NamedTuple):
         """
         enlarged_smaps: SaliencyMaps = SaliencyMaps()
         for smap in smaps:
-            enlarged_smaps.append(self.enlarge_one_fn(smap=smap))
+            enlarged_smaps.append(smap=self.enlarge_one_fn(smap=smap))
         enlarged_smaps.finalize()
         smaps.clear()
         return enlarged_smaps

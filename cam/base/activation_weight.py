@@ -5,6 +5,7 @@ from typing import Callable, Any
 
 import torch
 from torch import Tensor
+import torch.nn.functional as F
 
 from cam.base import channel_shape, CommonWeight
 from cam.base.containers import Weights, SaliencyMaps
@@ -32,12 +33,13 @@ class ActivationWeight(CommonWeight):
         return
 
     def set_class_weights(
-        self: ActivationWeight, class_weights: Tensor
+        self: ActivationWeight,
+        class_weights: Tensor,
     ) -> None:
-        """set class weights
+        """set class weights.
 
         Args:
-            class_weights (Tensor): class weights
+            class_weights (Tensor): class weights.
         """
         self.class_weights_ = class_weights
         return
@@ -56,7 +58,7 @@ class ActivationWeight(CommonWeight):
         for activation in ctx.activations:
             fake: Tensor = torch.ones_like(activation).to(self.device)
             fake[:, :, 0, 0] = 0.0  # set 0 to the top-left corner
-            fake_smaps.append(fake)
+            fake_smaps.append(smap=fake)
         fake_smaps.finalize()
         return fake_smaps
 
@@ -74,7 +76,7 @@ class ActivationWeight(CommonWeight):
         """
         weights: Weights = Weights()
         for _ in range(len(ctx.activations)):
-            weights.append(torch.ones((1, 1, 1, 1)).to(self.device))
+            weights.append(weight=torch.ones((1, 1, 1, 1)).to(self.device))
         weights.finalize()
         return weights
 
@@ -92,12 +94,34 @@ class ActivationWeight(CommonWeight):
         """
         weights: Weights = Weights()
         weights.append(
-            self.class_weights_[[ctx.label], :].view(
+            weight=self.class_weights_[[ctx.label], :].view(
                 1, channel_shape(self.class_weights_), 1, 1
             )
         )
         weights.finalize()
         return weights
+
+    def _arrange_gradient(
+        self: ActivationWeight,
+        layer: int,
+        gradient: Tensor,
+    ) -> Tensor:
+        """arrange gradient.
+
+        Args:
+            layer (int): layer offset (0 == last Conv. Layer).
+            gradient (Tensor): gradient.
+
+        Returns:
+            Tensor: arranged_gradient.
+        """
+        if layer == 0:
+            if self.gradient_gap_:
+                k: int = channel_shape(gradient)
+                gradient = gradient.view(1, k, -1).mean(dim=2).view(1, k, 1, 1)
+        else:
+            gradient = F.relu(gradient)
+        return gradient
 
     def _activation_weight_gradient(
         self: ActivationWeight,
@@ -112,8 +136,13 @@ class ActivationWeight(CommonWeight):
             Weights: the gradient.
         """
         weights: Weights = Weights()
-        for gradient in ctx.gradients:
-            weights.append(gradient.clone())
+        for i, gradient in enumerate(ctx.gradients):
+            weights.append(
+                weight=self._arrange_gradient(
+                    layer=i,
+                    gradient=gradient.clone(),
+                )
+            )
         weights.finalize()
         return weights
 
@@ -130,7 +159,9 @@ class ActivationWeight(CommonWeight):
             Weights: smoothed gradient.
         """
         weights: Weights = Weights()
-        for activation, gradient in zip(ctx.activations, ctx.gradients):
+        for i, (activation, gradient) in enumerate(
+            zip(ctx.activations, ctx.gradients)
+        ):
             k: int = channel_shape(activation)
             # alpha = gradient ** 2 /
             #         2 * (gradient ** 2) + SUM(avtivation * (gradient ** 3))
@@ -146,7 +177,12 @@ class ActivationWeight(CommonWeight):
             alpha_denom = alpha_denom.clamp(min=1.0)  # for stability
             alpha: Tensor = alpha_numer / alpha_denom
             # weight = alpha * gradient
-            weights.append(alpha * gradient)
+            weights.append(
+                weight=self._arrange_gradient(
+                    layer=i,
+                    gradient=alpha * gradient,
+                )
+            )
         weights.finalize()
         return weights
 
@@ -163,8 +199,15 @@ class ActivationWeight(CommonWeight):
             Weights: gradient * activation.
         """
         weights: Weights = Weights()
-        for activation, gradient in zip(ctx.activations, ctx.gradients):
-            weights.append(gradient * activation)
+        for i, (activation, gradient) in enumerate(
+            zip(ctx.activations, ctx.gradients)
+        ):
+            weights.append(
+                weight=self._arrange_gradient(
+                    layer=i,
+                    gradient=gradient * activation,
+                )
+            )
         weights.finalize()
         return weights
 
@@ -200,25 +243,11 @@ class ActivationWeight(CommonWeight):
             raise NotImplementedError(
                 f"activation weight is invalid: {self.activation_weight}"
             )
-        source: Weights = fn(ctx=ctx)
-        # GAP (global average pooling) weight
-        weights: Weights
-        if self.gradient_gap_:
-            weights = Weights()
-            for weight in source:
-                k: int = channel_shape(weight)
-                weights.append(
-                    weight.view(1, k, -1).mean(dim=2).view(1, k, 1, 1)
-                )
-            weights.finalize()
-            source.clear()
-        else:
-            # do nothing on purpose
-            weights = source
+        weights: Weights = fn(ctx=ctx)
         # create saliency maps by multiplying weight and activation
-        raw_smaps: SaliencyMaps = SaliencyMaps()
+        smaps: SaliencyMaps = SaliencyMaps()
         for weight, activation in zip(weights, ctx.activations):
-            raw_smaps.append(smap=weight * activation)
-        raw_smaps.finalize()
+            smaps.append(smap=weight * activation)
+        smaps.finalize()
         weights.clear()
-        return raw_smaps
+        return smaps
