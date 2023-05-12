@@ -2,7 +2,7 @@
 # -*- coding:utf-8 -*-
 """common types, values, functions and CommonCAM"""
 from __future__ import annotations
-from typing import Tuple, List, Callable, Union, Any
+from typing import Tuple, List, Callable, Union, Optional, Any
 
 import torch
 from torch import Tensor
@@ -79,7 +79,8 @@ class CommonSMAP:
     Network, RawSMAPS, PositionSMAPS, ChannelSMAPS and FinalSMAP.
     """
 
-    def __init__(self: CommonSMAP, **kargs: Any) -> None:
+    def __init__(self: CommonSMAP, **kwargs: Any) -> None:
         self.device: str = "cuda" if torch.cuda.is_available() else "cpu"
         self.eps: float = 1e-6
+        self.random_state: Optional[int] = kwargs.get("random_state")
         return

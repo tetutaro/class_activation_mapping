@@ -2,6 +2,7 @@
 # -*- coding:utf-8 -*-
 from __future__ import annotations
 from typing import List, Dict, Optional, Callable, Any
+from warnings import catch_warnings, filterwarnings
 
 import numpy as np
 import torch
@@ -35,63 +36,47 @@ class ChannelSMAPS(CommonSMAP):
         self.n_channels_: int = kwargs["n_channels"]
         self.n_channel_groups_: Optional[int] = kwargs["n_channel_groups"]
         self.channel_minmax_: bool = kwargs["channel_minmax"]
-        self.random_state_: Optional[int] = kwargs["random_state"]
         if self.channel_weight == "none":
             self.channel_minmax_ = False
         return
 
-    # ## group channels
-
-    def _channel_none_group(
-        self: ChannelSMAPS,
-        smap: Tensor,
-        ctx: Context,
-    ) -> Tensor:
-        """dummy clustering
-
-        Args:
-            smap (Tensor): saliemcy map
-            ctx (Context): the context of this process.
-
-        Returns:
-            Tensor: (channel x channel) identity matrix
-        """
-        return torch.diag(torch.ones(channel_shape(smap))).to(self.device)
+    # ## functions to create channel group map (channel -> channel group)
 
     def _estimate_n_groups(
         self: ChannelSMAPS,
         features: np.ndarray,
     ) -> int:
-        """automatically estimate optimal number of groups.
-
-        estimate optimal number of groups from the elbow point of
-        summed squared error of k-Means (inertia).
+        """automatically estimate an optimal number of groups.
 
         Args:
-            features (np.ndarray): data.
+            features (np.ndarray): the data (n_data x n_features).
 
         Returns:
-            int: the optimal number groups
+            int: the optimal number of groups
         """
+        # estimate the max number of groups based on the Sturges' Rule
         n_data: int = features.shape[0]
-        max_groups: int = int(np.ceil(np.log(n_data))) + 1
+        max_groups: int = int(np.ceil(np.log2(n_data))) + 2
         n_groups_list: List[int] = list(range(2, max_groups))
+        # k-Means for earch number of groups
         inertia_list: List[float] = list()
         for n_groups in n_groups_list:
             km: KMeans = KMeans(
                 n_clusters=n_groups,
                 init="k-means++",
                 n_init="auto",
-                random_state=self.random_state_,
+                random_state=self.random_state,
             ).fit(features)
             inertia_list.append(km.inertia_)
-        # retrieve elbow point by KneeLocator
-        kneedle: KneeLocator = KneeLocator(
-            n_groups_list,
-            inertia_list,
-            curve="convex",
-            direction="decreasing",
-        )
+        # calc elbow point of k-Means' inertia
+        with catch_warnings():
+            filterwarnings("ignore", category=UserWarning)
+            kneedle: KneeLocator = KneeLocator(
+                x=n_groups_list,
+                y=inertia_list,
+                curve="convex",
+                direction="decreasing",
+            )
         n_groups: int
         if kneedle.elbow is None:
             n_groups = max_groups
@@ -99,42 +84,58 @@ class ChannelSMAPS(CommonSMAP):
             n_groups = kneedle.elbow
         return n_groups
 
-    def _channel_kmeans_group(
+    def _channel_group_none(
         self: ChannelSMAPS,
         smap: Tensor,
         ctx: Context,
     ) -> Tensor:
-        """clustering channels using k-Means
+        """dummy clustering.
 
         Args:
-            smap (Tensor): saliemcy map
+            smap (Tensor): the saliemcy map (1 x channel x height x width).
             ctx (Context): the context of this process.
 
         Returns:
-            Tensor: group mappings (n_groups x n_channels)
+            Tensor: identity matrix (channel x channel).
         """
+        return torch.diag(torch.ones(channel_shape(smap))).to(self.device)
+
+    def _channel_group_kmeans(
+        self: ChannelSMAPS,
+        smap: Tensor,
+        ctx: Context,
+    ) -> Tensor:
+        """clustering channels using k-Means.
+
+        Args:
+            smap (Tensor): the saliemcy map (1 x channel x height x width).
+            ctx (Context): the context of this process.
+
+        Returns:
+            Tensor: channel group map (group x channel).
+        """
+        # create features to create channel group map
         k: int = channel_shape(smap)
         features: np.ndarray = smap.view(k, -1).detach().cpu().numpy()
-        n_groups: int
-        if self.n_channel_groups_ is not None:
-            n_groups = self.n_channel_groups_
-        else:
-            n_groups = self._estimate_n_groups(features=features)
-            self.n_channel_groups_ = n_groups
+        if self.n_channel_groups_ is None:
+            # estimate the optimal number of groups
+            self.n_channel_groups_ = self._estimate_n_groups(features=features)
+        # cluster the data using k-Means
         km: KMeans = KMeans(
-            n_clusters=n_groups,
+            n_clusters=self.n_channel_groups_,
             init="k-means++",
             n_init="auto",
-            random_state=self.random_state_,
+            random_state=self.random_state,
         ).fit(features)
+        # create group map
         group_weight_list: List[List[float]] = list()
-        for group in range(n_groups):
+        for group in range(self.n_channel_groups_):
             group_weight: np.ndarray = np.where(km.labels_ == group, 1.0, 0.0)
             group_weight /= group_weight.sum()
             group_weight_list.append(group_weight.tolist())
         return torch.tensor(group_weight_list).to(self.device)
 
-    def _channel_spectral_group(
+    def _channel_group_spectral(
         self: ChannelSMAPS,
         smap: Tensor,
         ctx: Context,
@@ -142,167 +143,137 @@ class ChannelSMAPS(CommonSMAP):
         """clustering channels using Spectral Clustering.
 
         Args:
-            smap (Tensor): saliemcy map
+            smap (Tensor): the saliemcy map (1 x channel x height x width).
             ctx (Context): the context of this process.
 
         Returns:
-            Tensor: group mappings (n_groups x n_channels)
+            Tensor: channel group map (group x channel).
         """
+        # create features to create channel group map
         k: int = channel_shape(smap)
         features: np.ndarray = smap.view(k, -1).detach().cpu().numpy()
-        n_groups: int
-        if self.n_channel_groups_ is not None:
-            n_groups = self.n_channel_groups_
-        else:
-            n_groups = self._estimate_n_groups(features=features)
-            self.n_channel_groups_ = n_groups
+        if self.n_channel_groups_ is None:
+            # estimate the optimal number of groups
+            self.n_channel_groups_ = self._estimate_n_groups(features=features)
+        # cluster the data using Spectral Clustering
         sc: SpectralClustering = SpectralClustering(
-            n_clusters=n_groups,
+            n_clusters=self.n_channel_groups_,
             affinity="nearest_neighbors",
             n_jobs=-1,
-            random_state=self.random_state_,
+            random_state=self.random_state,
         ).fit(features)
+        # create group map
         group_weight_list: List[List[float]] = list()
-        for group in range(n_groups):
+        for group in range(self.n_channel_groups_):
             group_weight: np.ndarray = np.where(sc.labels_ == group, 1.0, 0.0)
             group_weight /= group_weight.sum()
             group_weight_list.append(group_weight.tolist())
         return torch.tensor(group_weight_list).to(self.device)
 
-    # ## weight channels and merge
+    # ## functions to create weight for each channel group
 
-    def _channel_none_weight(
+    def _channel_weight_none(
         self: ChannelSMAPS,
-        smap: Tensor,
+        g_smap: Tensor,
         gmap: Tensor,
         ctx: Context,
     ) -> Tensor:
-        """global average pooling over channel groups.
+        """weight by the number of channels for each channel groups.
 
         Args:
-            smap (Tensor): the saliency map.
-            gmap (Tensor): the group mapping (group x channel)
+            g_smap (Tensor):
+                the grouped saliency map (1 x group x height x width).
+            gmap (Tensor): the channel group map (group x channel).
             ctx (Context): the context of this process.
 
         Returns:
-            Tensor: weights for each channel groups.
+            Tensor: weight for each channel groups.
         """
-        g: int = batch_shape(gmap)
-        return (torch.ones(g) / g).to(self.device)
+        return torch.where(gmap > 0, 1.0, 0.0).sum(dim=1) / channel_shape(gmap)
 
-    def _channel_eigen_weight(
+    def _channel_weight_eigen(
         self: ChannelSMAPS,
-        smap: Tensor,
+        g_smap: Tensor,
         gmap: Tensor,
         ctx: Context,
     ) -> Tensor:
-        """Eigen-CAM
+        """the first eigen-vector of the channel space.
 
-        M. Muhammad, et al.
-        "Eigen-CAM:
-        Class Activation Map using Principal Components"
-        IJCNN 2020.
-
-        https://arxiv.org/abs/2008.00299
+        The grouped saliency map is divided into
+        the channel group space and the positoin space by
+        SVD (Singular Value Decomposition).
+        Each vertical vectors in the channel group space
+        is the eigen-vector of the channel group space.
+        use the first eigen-vector (that has the highest eigen-value)
+        of the channel group space as the weight for each channel groups.
 
         Args:
-            smap (Tensor): the saliency map to calc weight.
-            gmap (Tensor): the group mapping (group x channel)
+            g_smap (Tensor):
+                the grouped saliency map (1 x group x height x width).
+            gmap (Tensor): the channel group map (group x channel).
             ctx (Context): the context of this process.
 
         Returns:
-            Tensor: weights for each channel groups.
+            Tensor: weight for each channel groups.
         """
-        k: int = channel_shape(smap)
-        u, v = position_shape(smap)
-        g: int = batch_shape(gmap)
-        # create channel x position matrix
-        CP: Tensor = gmap @ smap.view(k, -1)
-        if DEBUG:
-            batch_shape(CP) == g
-            channel_shape(CP) == u * v
+        g: int = channel_shape(g_smap)
+        # create group x position matrix
+        GP: Tensor = g_smap.view(g, -1)
         # standarize
-        CP_std: Tensor = (CP - CP.mean()) / CP.std()
+        GP_std: Tensor = (GP - GP.mean()) / GP.std()
         # SVD (singular value decomposition)
-        Ch, SS, _ = torch.linalg.svd(CP_std, full_matrices=False)
-        # retrieve weight vector
-        # * Candidate 1: (the same as the Eigen-CAM paper)
-        #   the first eigen-vector of the channel matrix
-        #     weight: Tensor = Ch.real[:, SS.argmax()]
-        # * Candidate 2: projection of each channel vector
-        #   to the first eigen-vector of variance-covariance matrix
-        #   of the channel matrix
-        weight: Tensor = Ch.real[:, SS.argmax()]
-        # normalize weight
-        weight = F.normalize(weight, dim=0).view(1, g, 1, 1)
-        # the eigen-vector may have the opposite sign
-        if (weight * F.relu(CP.view(1, g, u, v))).sum() < 0:
+        # Gs = channel group space, ss = eigen-values
+        Gs, ss, _ = torch.linalg.svd(GP_std, full_matrices=False)
+        # retrieve the first eigen-vector and normalize it
+        weight: Tensor = F.normalize(Gs.real[:, ss.argmax()], dim=0)
+        # test the eigen-vector may have the opposite sign
+        if (weight.view(1, g, 1, 1) * F.relu(g_smap)).sum() < 0:
             weight = -weight
-        return weight.view(-1)
+        return weight
 
-    def _channel_ablation_weight(
+    def _channel_weight_ablation(
         self: ChannelSMAPS,
-        smap: Tensor,
+        g_smap: Tensor,
         gmap: Tensor,
         ctx: Context,
     ) -> Tensor:
-        """Ablation-CAM
-
-        H. Ramaswamy, et al.
-        "Ablation-CAM:
-        Visual Explanations for Deep Convolutional Network
-        via Gradient-free Localization"
-        WACV 2020.
-
-        https://openaccess.thecvf.com/content_WACV_2020/html/Desai_Ablation-CAM_Visual_Explanations_for_Deep_Convolutional_Network_via_Gradient-free_Localization_WACV_2020_paper.html
+        """slope of Ablation score.
 
         Args:
-            smap (Tensor): the saliency map to calc weight.
-            gmap (Tensor): the group mapping (group x channel)
+            g_smap (Tensor):
+                the grouped saliency map (1 x group x height x width).
+            gmap (Tensor): the group map (group x channel).
             ctx (Context): the context of this process.
 
         Returns:
-            Tensor: weights for each channel groups.
+            Tensor: weight for each channel groups.
         """
         if DEBUG:
             len(ctx.activations) == 1
         activation: Tensor = ctx.activations[0]
-        k: int = channel_shape(activation)
         u, v = position_shape(activation)
         g: int = batch_shape(gmap)
-        if DEBUG:
-            assert channel_shape(smap) == k
-            assert position_shape(smap) == (u, v)
         ablation_list: List[Tensor] = list()
         for i in range(g):
             # group mask
             gmask: Tensor = torch.where(gmap[i, :].view(-1) > 0)[0]
-            # drop i-th group (ablation)
+            # drop i-th channel group (ablation)
             ablation: Tensor = activation.clone()
             ablation[:, gmask, :, :] = 0
             ablation_list.append(ablation)
         ablations: Tensor = torch.cat(ablation_list, dim=0)
         # forward Ablations and retrieve Ablation score
-        a_scores: Tensor = ctx.classify_fn(activation=ablations)[
-            :, ctx.label
-        ].view(-1)
-        # weight = slope of Ablation score
+        a_scores: Tensor = ctx.classify_fn(activation=ablations)[:, ctx.label]
+        # slope of Ablation score
         return (ctx.score - a_scores) / (ctx.score + self.eps)
 
-    def _channel_abscission_weight(
+    def _channel_weight_abscission(
         self: ChannelSMAPS,
-        smap: Tensor,
+        g_smap: Tensor,
         gmap: Tensor,
         ctx: Context,
     ) -> Tensor:
-        """Score-CAM
-
-        H. Wang, et al.
-        "Score-CAM:
-        Score-Weighted Visual Explanations for Convolutional Neural Networks"
-        CVF 2020.
-
-        https://arxiv.org/abs/1910.01279
+        """CIC (Channel-wise Increase of Confidence) scores.
 
         calc CIC (Channel-wise Increase of Confidence) scores
         as a weight for each channels.
@@ -310,28 +281,27 @@ class ChannelSMAPS(CommonSMAP):
         (in contrast with "Ablation").
 
         Args:
-            smap (Tensor): the saliency map to calc weight.
-            gmap (Tensor): the group mapping (group x channel)
+            g_smap (Tensor):
+                the grouped saliency map (1 x group x height x width).
+            gmap (Tensor): the group map (group x channel).
             ctx (Context): the context of this process.
 
         Returns:
-            Tensor: weights for each channel groups.
+            Tensor: weight for each channel groups.
         """
         # create grouped saliency map
-        b, k, u, v = smap.shape
-        g: int = batch_shape(gmap)
-        group_smap: Tensor = (gmap @ smap.view(k, -1)).view(1, g, u, v)
+        _, g, u, v = g_smap.shape
         mask_dicts: List[Dict] = list()
         for i in range(g):
             # extract i-th group from the saliency map ("Abscission")
-            abscission: Tensor = group_smap.clone()[:, [i], :, :]
+            abscission: Tensor = g_smap[:, [i], :, :]
             # normalize
             smax: Tensor = abscission.max().squeeze()
             smin: Tensor = abscission.min().squeeze()
             sdif: Tensor = smax - smin
             if sdif < self.eps:
                 continue
-            # create smoother mask for the original image
+            # smoother mask for the original image
             mask: Tensor = (abscission - smin) / sdif
             # stack information
             mask_dicts.append(
@@ -350,27 +320,14 @@ class ChannelSMAPS(CommonSMAP):
         for mask_dict in mask_dicts:
             masked: Tensor = ctx.image * mask_dict["mask"]
             # SIGCAM
-            # Q. Zhang, et al.
-            # "A Novel Visual Interpretability for Deep Neural Networks
-            # by Optimizing Activation Maps with Perturbation"
-            # AAAI 2021.
             masked += ctx.blurred_image * (1.0 - mask_dict["mask"])
             masked_list.append(masked)
         maskedes: Tensor = torch.cat(masked_list, dim=0)
-        # forward network, calc CIC scores and normalize it
-        # (CIC: Channel-wise Increase of Confidence)
-        # CIC score = (Abscission masked score) - (original score)
-        # ## normalize CIC scores
-        # The paper of Score-CAM use softmax for normalization.
-        # But softmax turns negative values into positive values.
-        # For that reason, if the target class is not the first rank,
-        # the positive region of saliency map can't show the target.
-        # So, Here, use normalization with L2-norm instead of softmax.
-        cic_scores: Tensor = F.normalize(
-            ctx.forward_fn(image=maskedes)[:, ctx.label].squeeze() - ctx.score,
-            dim=0,
-        )
+        # forward network then retrieve reduced score
+        reduced_scores: Tensor = ctx.forward_fn(image=maskedes)[:, ctx.label]
         del maskedes
+        # calc CIC score and normalize it
+        cic_scores = F.normalize(reduced_scores - ctx.score, dim=0)
         # create weight
         weight: Tensor
         if batch_shape(cic_scores) < g:
@@ -387,13 +344,17 @@ class ChannelSMAPS(CommonSMAP):
             weight = cic_scores
         return weight
 
+    # ## main function
+
     def create_channel_smaps(
         self: ChannelSMAPS,
         position_smaps: SaliencyMaps,
         ctx: Context,
     ) -> SaliencyMaps:
-        """merge channel saliency maps over channels.
-        (merged saliency maps = layer saliency maps)
+        """create channel saliency maps.
+
+        weight for each channels
+        and merge position saliency maps over channels.
 
         Args:
             position_smaps (SaliencyMaps): position saliency maps.
@@ -402,15 +363,12 @@ class ChannelSMAPS(CommonSMAP):
         Returns:
             SaliencyMaps: channel saliency maps.
         """
-        # enlarge position saliency maps if channel_weight == "abscission"
-        smaps: SaliencyMaps
         if self.channel_weight == "abscission":
-            smaps = ctx.enlarge_fn(smaps=position_smaps)
-        else:
-            smaps = position_smaps
+            # forcibly enlarge saliency maps to the original image size
+            position_smaps = ctx.enlarge_fn(smaps=position_smaps)
         # create channel saliency map for each layers
         channel_smaps: SaliencyMaps = SaliencyMaps()
-        for smap in smaps:
+        for smap in position_smaps:
             b, k, u, v = smap.size()
             if DEBUG:
                 assert b == 1
@@ -418,56 +376,65 @@ class ChannelSMAPS(CommonSMAP):
                 # channel saliency map is already created
                 channel_smaps.append(smap.clone())
                 continue
-            # functions to create group mapping
+            # the function to create channel group map
             group_fn: Callable[[Tensor, Context], Tensor]
             if self.channel_group == "none":
-                group_fn = self._channel_none_group
+                group_fn = self._channel_group_none
             elif self.channel_group == "k-means":
-                group_fn = self._channel_kmeans_group
+                group_fn = self._channel_group_kmeans
             elif self.channel_group == "spectral":
-                group_fn = self._channel_spectral_group
+                group_fn = self._channel_group_spectral
             else:
                 raise SystemError(
                     f"invalid channel_group: {self.channel_group}"
                 )
-            # group mapping
+            # the function to create weight for each channel groups
+            weight_fn: Callable[[Tensor, Tensor, Context], Tensor]
+            if self.channel_weight == "none":
+                weight_fn = self._channel_weight_none
+            elif self.channel_weight == "eigen":
+                weight_fn = self._channel_weight_eigen
+            elif self.channel_weight == "ablation":
+                weight_fn = self._channel_weight_ablation
+            elif self.channel_weight == "abscission":
+                weight_fn = self._channel_weight_abscission
+            else:
+                raise SystemError(
+                    f"invalid channel_weight: {self.channel_weight}"
+                )
+            # create channel group map
             gmap: Tensor = group_fn(smap=smap, ctx=ctx)
             if DEBUG:
                 assert channel_shape(gmap) == k
                 assert torch.allclose(
                     gmap.sum(dim=1), torch.ones(batch_shape(gmap))
                 )
-            # functions to create weight for each channel groups
-            weight_fn: Callable[[Tensor, Tensor, Context], Tensor]
-            if self.channel_weight == "none":
-                weight_fn = self._channel_none_weight
-            elif self.channel_weight == "eigen":
-                weight_fn = self._channel_eigen_weight
-            elif self.channel_weight == "ablation":
-                weight_fn = self._channel_ablation_weight
-            elif self.channel_weight == "abscission":
-                weight_fn = self._channel_abscission_weight
-            else:
-                raise SystemError(
-                    f"invalid channel_weight: {self.channel_weight}"
-                )
-            # average position saliency maps per channel groups
+            # group saliency map
             g: int = batch_shape(gmap)
-            group_smap: Tensor = (gmap @ smap.view(k, -1)).view(1, g, u, v)
-            # weight group saliency map and sum over channels
-            weight: Tensor = weight_fn(smap=smap, gmap=gmap, ctx=ctx)
+            g_smap: Tensor = (gmap @ smap.view(k, -1)).view(1, g, u, v)
+            # weight grouped saliency map and sum over channels
+            g_weight: Tensor = weight_fn(g_smap=g_smap, gmap=gmap, ctx=ctx)
+            if DEBUG:
+                assert len(g_weight.shape) == 1
             if self.channel_minmax_:
                 # cognition-base and cognition-scissors
-                base: int = weight.argmax().detach().cpu().numpy().ravel()[0]
-                scis: int = weight.argmin().detach().cpu().numpy().ravel()[0]
-                weight = torch.zeros(g).to(self.device)
-                weight[base] = 1.0
-                weight[scis] = -1.0
-            weight = weight.view(1, g, 1, 1)
+                # cognition-base is the channel group that has
+                # the highest impact on the saliency map.
+                # and cognision-scissors is the channel group that has
+                # the least impact on the saliency map.
+                # set the value of cognition-base of the weight to 1,
+                # and set the value of cognition-scissors of the weight to -1.
+                # other values of the weight is set to 0.
+                base: int = g_weight.argmax().detach().cpu().numpy().ravel()[0]
+                scis: int = g_weight.argmin().detach().cpu().numpy().ravel()[0]
+                g_weight = torch.zeros(g).to(self.device)
+                g_weight[base] = 1.0
+                g_weight[scis] = -1.0
+            g_weight = g_weight.view(1, g, 1, 1)
             channel_smaps.append(
-                smap=(weight * group_smap).sum(dim=1, keepdim=True)
+                smap=(g_weight * g_smap).sum(dim=1, keepdim=True)
             )
         # finelize
         channel_smaps.finalize()
-        smaps.clear()
+        position_smaps.clear()
         return channel_smaps

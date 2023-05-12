@@ -163,20 +163,20 @@ class BaseCAM(Network, RawSMAPS, PositionSMAPS, ChannelSMAPS, FinalSMAP):
         # the name of CAM model
         self.name_ = name
         # set random seeds
-        if random_state is not None:
-            self._set_random_seeds(random_state=random_state)
+        if self.random_state is not None:
+            self._set_random_seeds()
         return
 
-    def _set_random_seeds(self: BaseCAM, random_state: int) -> None:
+    def _set_random_seeds(self: BaseCAM) -> None:
         """set random seeds
 
         Args:
             random_state (int): the seed of random
         """
-        # random.seed(random_state)
-        np.random.seed(seed=random_state)
-        torch.manual_seed(seed=random_state)
-        torch.cuda.manual_seed(seed=random_state)
+        # random.seed(self.random_state)
+        np.random.seed(seed=self.random_state)
+        torch.manual_seed(seed=self.random_state)
+        torch.cuda.manual_seed(seed=self.random_state)
         # torch.backends.cudnn.deterministic = True
         # torch.use_deterministic_algorithms = True
         return

@@ -34,10 +34,26 @@ class Context(NamedTuple):
         self.gradients.clear()
         return
 
-    def enlarge_fn(
-        self: Context,
-        smaps: SaliencyMaps,
-    ) -> SaliencyMaps:
+    def enlarge_one_fn(self: Context, smap: Tensor) -> Tensor:
+        """enlarge a saliency map (or an activation) to the original image size.
+
+        Args:
+            smap (Tensor): the saliency map (or activation) to enlarge.
+
+        Returns:
+            Tensor: enlarged saliency map (or activation).
+        """
+        u, v = position_shape(smap)
+        if u == self.height and v == self.width:
+            return smap.clone()
+        return F.interpolate(
+            smap,
+            size=(self.height, self.width),
+            mode="bilinear",
+            align_corners=False,
+        )
+
+    def enlarge_fn(self: Context, smaps: SaliencyMaps) -> SaliencyMaps:
         """enlarge saliency maps to the original image size.
 
         Args:
@@ -48,18 +64,7 @@ class Context(NamedTuple):
         """
         enlarged_smaps: SaliencyMaps = SaliencyMaps()
         for smap in smaps:
-            u, v = position_shape(smap)
-            if u == self.height and v == self.width:
-                enlarged_smaps.append(smap=smap.clone())
-            else:
-                enlarged_smaps.append(
-                    smap=F.interpolate(
-                        smap,
-                        size=(self.height, self.width),
-                        mode="bilinear",
-                        align_corners=False,
-                    )
-                )
+            enlarged_smaps.append(self.enlarge_one_fn(smap=smap))
         enlarged_smaps.finalize()
         smaps.clear()
         return enlarged_smaps
