@@ -97,19 +97,36 @@ class NetworkWeight(CommonWeight):
     If so, the output size (H x W) of the AvgPool Layer is larger than 1.
     Then, we have to average the weight per the output size.
     (self._create_class_weight())
+
+    Args:
+        net (Callable[[], nn.Module]): function to create CNN model.
+        weights (WeightsEnum): pre-trained weight of CNN model.
+        batch_size (int): max number of images in a batch.
+        n_divides (int): number of divides. (use it in IntegratedGrads)
+        n_samples (int): number of samplings. (use it in SmoothGrad)
+        sigma (float): sdev of Normal Dist. (use it in SmoothGrad)
     """
 
-    def __init__(self: NetworkWeight, **kwargs: Any) -> None:
+    def __init__(
+        self: NetworkWeight,
+        net: Callable[[], nn.Module],
+        weights: WeightsEnum,
+        batch_size: int,
+        n_divides: int,
+        n_samples: int,
+        sigma: float,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         # parameters
-        self.batch_size_: int = kwargs["batch_size"]
-        self.n_divides_: int = kwargs["n_divides"]
-        self.n_samples_: int = kwargs["n_samples"]
-        self.sigma_: float = kwargs["sigma"]
+        self.batch_size_: int = batch_size
+        self.n_divides_: int = n_divides
+        self.n_samples_: int = n_samples
+        self.sigma_: float = sigma
         # network
-        self.net_weights_: WeightsEnum = kwargs["weights"]
+        self.net_weights_: WeightsEnum = weights
         self.net_: nn.Module = (
-            kwargs["net"](weights=self.net_weights_).to(self.device).eval()
+            net(weights=self.net_weights_).to(self.device).eval()
         )
         self.softmax_: nn.Softmax = nn.Softmax(dim=1)
         # transform function from PIL.Image to Tensor

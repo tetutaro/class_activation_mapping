@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 from __future__ import annotations
-from typing import List, Optional
+from typing import List, Optional, Any
+import os
 
 import numpy as np
 import torch
 from torch import Tensor
 from PIL import Image, ImageFilter
-import matplotlib as mpl
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
 
 from cam.backbones.backbone import Backbone
 from cam.base import (
@@ -66,29 +68,31 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
     and call model.draw().
 
     Args:
-        name (str): the name of this CAM model.
         backbone (Backbone): resource of the CNN model.
+        batch_size (int): max number of images in a batch.
+        n_divides (int): number of divides. (use it in IntegratedGrads)
+        n_samples (int): number of samplings. (use it in SmoothGrad)
+        sigma (float): sdev of Normal Dist. (use it in SmoothGrad)
         activation_weight (str): the type of weight for each activations.
-        gradient_gap (bool): if True, average activation weight over positions.
         gradient_smooth (str): the method of smoothing gradient.
+        gradient_no_gap (bool): if True, use gradient as is.
         channel_weight (str): the method of weighting for each channels.
         channel_group (str): the method of creating groups.
         channel_cosine (bool): if True, use cosine distance at clustering.
         channel_minmax (bool): if True, adopt the best&worst channel only.
-        high_resolution (bool): if True, produce high resolution heatmap.
-        sigma (float): sdev of Normal Dist. (use it in SmoothGrad)
-        batch_size (int): max number of images in a batch.
-        n_divides (int): number of divides. (use it in IntegratedGrads)
-        n_samples (int): number of samplings. (use it in SmoothGrad)
         n_channels (int): the number of abscission channel groups to calc.
         n_groups (Optional[int]): the number of channel groups.
+        high_resolution (bool): if True, produce high resolution heatmap.
         random_state (Optional[int]): the random seed.
+
+    Attributes:
+        cam_name (str): the name of this CAM model.
     """
+
+    cam_name: str = "Base-CAM"
 
     def __init__(
         self: BaseCAM,
-        # settings for itself
-        name: str,
         # settings for NetworkWeight
         backbone: Backbone,
         batch_size: int = 8,
@@ -98,7 +102,7 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
         # settings for ActivationWeight
         activation_weight: str = "none",
         gradient_smooth: str = "none",
-        gradient_gap: bool = True,
+        gradient_no_gap: bool = False,
         # settings for ChannelWeight
         channel_weight: str = "none",
         channel_group: str = "none",
@@ -110,25 +114,26 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
         high_resolution: bool = False,
         # settings for CommonWeight
         random_state: Optional[int] = None,
+        **kwargs: Any,
     ) -> None:
         # initialize flags
         self.target_last_layer_: bool = False
         # initialize parents
         super().__init__(
-            activation_weight=activation_weight,
-            gradient_gap=gradient_gap,
-            gradient_smooth=gradient_smooth,
-            channel_weight=channel_weight,
-            channel_group=channel_group,
-            channel_cosine=channel_cosine,
-            channel_minmax=channel_minmax,
-            high_resolution=high_resolution,
-            sigma=sigma,
             batch_size=batch_size,
             n_divides=n_divides,
             n_samples=n_samples,
+            sigma=sigma,
+            activation_weight=activation_weight,
+            gradient_smooth=gradient_smooth,
+            gradient_no_gap=gradient_no_gap,
+            channel_weight=channel_weight,
+            channel_group=channel_group,
             n_channels=n_channels,
             n_groups=n_groups,
+            channel_cosine=channel_cosine,
+            channel_minmax=channel_minmax,
+            high_resolution=high_resolution,
             random_state=random_state,
             **backbone,
         )
@@ -140,11 +145,18 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
             self.set_class_weights(class_weights=self.get_class_weights())
         if channel_weight == "ablation":
             self.target_last_layer_ = True
-        # the name of CAM model
-        self.name_ = name
         # set random seeds
         if self.random_state is not None:
             self._set_random_seeds()
+        return
+
+    def set_cam_name(self: BaseCAM, cam_name: str) -> None:
+        """set the name of this CAM model as you like.
+
+        Args:
+            cam_name (str): the name of CAM model.
+        """
+        self.cam_name = cam_name
         return
 
     def _set_random_seeds(self: BaseCAM) -> None:
@@ -238,8 +250,8 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
         self: BaseCAM,
         path: str,
         target: TargetLayer,
-        fig: mpl.figure.Figure,
-        ax: mpl.axes.Axes,
+        fig: Figure,
+        ax: Axes,
         rank: Optional[int] = None,
         label: Optional[int] = None,
         draw_negative: bool = False,
@@ -248,14 +260,15 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
         title_model: bool = False,
         title_label: bool = False,
         title_score: bool = False,
+        **kwargs: Any,
     ) -> None:
         """the main function.
 
         Args:
             path (str): the pathname of the original image.
             target (TargetLayer): target Conv. Layers to retrieve activations.
-            fig (mpl.figure.Figure): the Figure instance.
-            ax (mpl.axies.Axes): the Axes instance.
+            fig (Figure): the Figure instance.
+            ax (Axes): the Axes instance.
             rank (Optional[int]): the rank of the target class.
             label (Optional[int]): the label of the target class.
             draw_negative (bool): draw negative regions or not.
@@ -263,11 +276,18 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
             title (Optional[str]): title of heatmap.
             title_model (bool): show model name in title.
             title_label (bool): show label name in title.
-            title_score (bool): show label name in title.
+            title_score (bool): show score in title.
+
+        Raises:
+            ValueError: parameters are invalid.
+            IndexError: target is out of index.
+            FileNotFoundError: path is not exists.
         """
         # convert target to List[str]
         target_layers: List[str] = self._convert_target(target=target)
         # load the original image
+        if not os.path.exists(path=path):
+            raise FileNotFoundError(f"{path} is not exists")
         raw_image: Image = Image.open(path)
         image: Tensor = self.transforms(raw_image).unsqueeze(0).to(self.device)
         if label is None:
@@ -346,7 +366,7 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
             if title_score:
                 label_name += f" ({ctx.score:.4f})"
             if title_model:
-                title = self.name_
+                title = self.cam_name
                 if title_label:
                     title += f" ({label_name})"
             elif title_label:

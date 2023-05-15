@@ -19,16 +19,27 @@ class ActivationWeight(CommonWeight):
     which region of image was payed attention to recognize the target object.
 
     XXX
+
+    Args:
+        activation_weight (str): the type of weight for each activations.
+        gradient_smooth (str): the method of smoothing gradient.
+        gradient_no_gap (bool): if True, use gradient as is.
     """
 
-    def __init__(self: ActivationWeight, **kwargs: Any) -> None:
+    def __init__(
+        self: ActivationWeight,
+        activation_weight: str,
+        gradient_smooth: str,
+        gradient_no_gap: bool,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         # store flags
-        self.activation_weight: str = kwargs["activation_weight"]
-        self.gradient_gap_: bool = kwargs["gradient_gap"]
-        self.gradient_smooth: str = kwargs["gradient_smooth"]
+        self.activation_weight: str = activation_weight
+        self.gradient_smooth: str = gradient_smooth
+        self.gradient_no_gap_: bool = gradient_no_gap
         if self.activation_weight in ["none", "class"]:
-            self.gradient_gap_ = False
+            self.gradient_no_gap_ = True
         self.class_weights_: Tensor
         return
 
@@ -116,7 +127,7 @@ class ActivationWeight(CommonWeight):
             Tensor: arranged_gradient.
         """
         if layer == 0:
-            if self.gradient_gap_:
+            if not self.gradient_no_gap_:
                 k: int = channel_shape(gradient)
                 gradient = gradient.view(1, k, -1).mean(dim=2).view(1, k, 1, 1)
         else:

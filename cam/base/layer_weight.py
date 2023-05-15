@@ -22,12 +22,19 @@ class LayerWeight(CommonWeight):
     """A part of the CAM model that is responsible for final saliency map.
 
     XXX
+
+    Args:
+        high_resolution (bool): if True, produce high resolution heatmap.
     """
 
-    def __init__(self: LayerWeight, **kwargs: Any) -> None:
+    def __init__(
+        self: LayerWeight,
+        high_resolution: bool,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         # store flags
-        self.high_resolution_: bool = kwargs["high_resolution"]
+        self.high_resolution_: bool = high_resolution
         return
 
     def _high_resolution(

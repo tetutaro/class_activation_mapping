@@ -8,7 +8,9 @@ import pandas as pd
 from IPython.display import display, Markdown
 from IPython import get_ipython
 from PIL import Image
-import matplotlib as mpl
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
+from matplotlib.image import AxesImage
 from skimage.segmentation import mark_boundaries
 
 
@@ -57,7 +59,7 @@ def draw_image_boundary(
     image: np.ndarray,
     boundary: np.ndarray,
     title: str,
-    ax: mpl.axes.Axes,
+    ax: Axes,
 ) -> None:
     """draw the original image and its boundaries of segments.
 
@@ -65,8 +67,8 @@ def draw_image_boundary(
         image (np.ndarray): the original image.
         boundary (np.ndarray): boundaries.
         titie (str): the title of the image.
-        fig (mpl.figure.Figure): the Figure instance.
-        ax (mpl.axies.Axes): the Axes instance.
+        fig (Figure): the Figure instance.
+        ax (Axes): the Axes instance.
     """
     ax.imshow(mark_boundaries(image, boundary))
     ax.set_title(title)
@@ -78,8 +80,8 @@ def draw_image_heatmap(
     image: Image,
     heatmap: np.ndarray,
     title: Optional[str],
-    fig: mpl.figure.Figure,
-    ax: mpl.axes.Axes,
+    fig: Figure,
+    ax: Axes,
     draw_negative: bool = False,
     draw_colorbar: bool = False,
 ) -> None:
@@ -89,8 +91,8 @@ def draw_image_heatmap(
         image (np.ndarray): the original image.
         heatmap (np.ndarray): the heatmap.
         titie (Optional[str]): the title of the image.
-        fig (mpl.figure.Figure): the Figure instance.
-        ax (mpl.axies.Axes): the Axes instance.
+        fig (Figure): the Figure instance.
+        ax (Axes): the Axes instance.
         draw_negative (bool): draw negative regions.
         draw_colorbar (bool): draw colorbar.
     """
@@ -103,7 +105,7 @@ def draw_image_heatmap(
     # draw original image
     ax.imshow(image)
     # draw overlay (heatmap)
-    mappable: mpl.image.AxesImage
+    mappable: AxesImage
     if draw_negative:
         mappable = ax.imshow(
             heatmap, cmap="RdBu_r", vmin=-1.0, vmax=1.0, alpha=0.5

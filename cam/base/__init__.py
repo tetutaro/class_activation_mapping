@@ -65,10 +65,17 @@ position_shape: Callable[[Tensor], Tuple[int, int]] = lambda x: tuple(
 class CommonWeight:
     """the common class for
     NetworkWeight, ActivationWeight, ChannelWeight and LayerWeight.
+
+    Args:
+        random_state (Optional[int]): the random seed.
     """
 
-    def __init__(self: CommonWeight, **kwargs: Any) -> None:
+    def __init__(
+        self: CommonWeight,
+        random_state: Optional[int],
+        **kwargs: Any,
+    ) -> None:
         self.device: str = "cuda" if torch.cuda.is_available() else "cpu"
         self.eps: float = 1e-6
-        self.random_state: Optional[int] = kwargs.get("random_state")
+        self.random_state: Optional[int] = random_state
         return

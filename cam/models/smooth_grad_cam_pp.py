@@ -23,7 +23,12 @@ class SmoothGradCAMpp(BaseCAM):
         n_samples (int): number of samplings. (use it in SmoothGrad)
         sigma (float): sdev of Normal Dist. (use it in SmoothGrad)
         random_state (Optional[int]): the random seed.
+
+    Attributes:
+        cam_name (str): the name of this CAM model.
     """
+
+    cam_name: str = "SmoothGrad-CAM++"
 
     def __init__(
         self: SmoothGradCAMpp,
@@ -34,7 +39,6 @@ class SmoothGradCAMpp(BaseCAM):
         **kwargs: Any,
     ) -> None:
         super().__init__(
-            name="Smooth Grad-CAM++",
             backbone=backbone,
             activation_weight="gradient++",
             gradient_smooth="noise",

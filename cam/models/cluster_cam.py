@@ -20,7 +20,15 @@ class ClusterCAM(BaseCAM):
 
     Args:
         backbone (Backbone): resouce of CNN.
+        n_channels (int): the number of abscission channel groups to calc.
+        n_groups (Optional[int]): the number of channel groups.
+        random_state (Optional[int]): the random seed.
+
+    Attributes:
+        cam_name (str): the name of this CAM model.
     """
+
+    cam_name: str = "Cluster-CAM"
 
     def __init__(
         self: ClusterCAM,
@@ -31,7 +39,6 @@ class ClusterCAM(BaseCAM):
         **kwargs: Any,
     ) -> None:
         super().__init__(
-            name="Cluster-CAM",
             backbone=backbone,
             activation_weight="gradient",
             channel_weight="abscission",

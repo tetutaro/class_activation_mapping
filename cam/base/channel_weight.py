@@ -26,17 +26,34 @@ class ChannelWeight(CommonWeight):
     """A part of the CAM model that is responsible for channel saliency maps.
 
     XXX
+
+    Args:
+        channel_weight (str): the method of weighting for each channels.
+        channel_group (str): the method of creating groups.
+        channel_cosine (bool): if True, use cosine distance at clustering.
+        channel_minmax (bool): if True, adopt the best&worst channel only.
+        n_channels (int): the number of abscission channel groups to calc.
+        n_groups (Optional[int]): the number of channel groups.
     """
 
-    def __init__(self: ChannelWeight, **kwargs: Any) -> None:
+    def __init__(
+        self: ChannelWeight,
+        channel_weight: str,
+        channel_group: str,
+        channel_cosine: bool,
+        channel_minmax: bool,
+        n_channels: int,
+        n_groups: Optional[int],
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         # store flags
-        self.channel_weight: str = kwargs["channel_weight"]
-        self.channel_group: str = kwargs["channel_group"]
-        self.n_channels_: int = kwargs["n_channels"]
-        self.n_groups_: Optional[int] = kwargs["n_groups"]
-        self.channel_cosine_: bool = kwargs["channel_cosine"]
-        self.channel_minmax_: bool = kwargs["channel_minmax"]
+        self.channel_weight: str = channel_weight
+        self.channel_group: str = channel_group
+        self.channel_cosine_: bool = channel_cosine
+        self.channel_minmax_: bool = channel_minmax
+        self.n_channels_: int = n_channels
+        self.n_groups_: Optional[int] = n_groups
         if self.channel_weight == "none":
             self.channel_minmax_ = False
         return

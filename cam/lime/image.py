@@ -7,7 +7,8 @@ import numpy as np
 from PIL import Image
 from lime.lime_image import LimeImageExplainer, ImageExplanation
 import torch
-import matplotlib as mpl
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
 
 from cam.base.network_weight import NetworkWeight
 from cam.backbones.backbone import Backbone
@@ -133,11 +134,11 @@ class LimeImage(NetworkWeight):
         show_text("\n".join([str(pred) for pred in self.preds_]))
         return
 
-    def draw_boundary(self: LimeImage, ax: mpl.axes.Axes) -> None:
+    def draw_boundary(self: LimeImage, ax: Axes) -> None:
         """draw boundary
 
         Args:
-            ax (mpl.axes.Axes): the Axes instance.
+            ax (Axes): the Axes instance.
         """
         draw_image_boundary(
             image=self.explain_.image,
@@ -149,8 +150,8 @@ class LimeImage(NetworkWeight):
 
     def draw(
         self: LimeImage,
-        fig: mpl.figure.Figure,
-        ax: mpl.axes.Axes,
+        fig: Figure,
+        ax: Axes,
         rank: Optional[int] = None,
         label: Optional[int] = None,
         draw_negative: bool = False,
@@ -158,19 +159,21 @@ class LimeImage(NetworkWeight):
         title: Optional[str] = None,
         title_model: bool = False,
         title_label: bool = False,
+        title_score: bool = False,
     ) -> None:
         """the main function.
 
         Args:
             rank (Optional[int]): the rank of the target class.
             label (Optional[int]): the label of the target class.
-            fig (Optional[mpl.figure.Figure]): the Figure instance.
-            ax (Optinonal[mpl.axies.Axes): the Axes instance.
+            fig (Optional[Figure]): the Figure instance.
+            ax (Optinonal[Axes): the Axes instance.
             draw_negative (bool): draw negative regions.
             draw_colorbar (bool): draw colorbar.
             title (Optional[str]): title of heatmap.
             title_model (bool): show model name in title.
             title_label (bool): show label name in title.
+            title_score (bool): show score in title.
         """
         if rank is None and label is None:
             rank = 0
@@ -192,16 +195,18 @@ class LimeImage(NetworkWeight):
             heatmap = heatmap.clip(min=-1.0, max=1.0)
         else:
             heatmap = heatmap.clip(min=0.0, max=1.0)
-        # create title
+        # title
         if title is None:
             label_name: str = self.labels[self.explain_.top_labels[rank]]
+            if title_score:
+                label_name += f" ({self.preds_[rank].score:.4f})"
             if title_model:
                 title = "LIME"
                 if title_label:
                     title += f" ({label_name})"
             elif title_label:
                 title = label_name
-        # draw
+        # draw the heatmap
         draw_image_heatmap(
             image=self.explain_.image,
             heatmap=heatmap,

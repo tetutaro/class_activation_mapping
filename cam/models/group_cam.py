@@ -20,7 +20,15 @@ class GroupCAM(BaseCAM):
 
     Args:
         backbone (Backbone): resouce of CNN.
+        n_channels (int): the number of abscission channel groups to calc.
+        n_groups (Optional[int]): the number of channel groups.
+        random_state (Optional[int]): the random seed.
+
+    Attributes:
+        cam_name (str): the name of this CAM model.
     """
+
+    cam_name: str = "Group-CAM"
 
     def __init__(
         self: GroupCAM,
@@ -31,7 +39,6 @@ class GroupCAM(BaseCAM):
         **kwargs: Any,
     ) -> None:
         super().__init__(
-            name="Group-CAM",
             backbone=backbone,
             activation_weight="gradient",
             channel_weight="abscission",

@@ -104,24 +104,28 @@ def w_vgg19(
 
 
 backbone_vgg11: Backbone = Backbone(
+    cnn_name="VGG11",
     net=w_vgg11,
     weights=VGG11_Weights.IMAGENET1K_V1,
 )
 
 
 backbone_vgg13: Backbone = Backbone(
+    cnn_name="VGG13",
     net=w_vgg13,
     weights=VGG13_Weights.IMAGENET1K_V1,
 )
 
 
 backbone_vgg16: Backbone = Backbone(
+    cnn_name="VGG16",
     net=w_vgg16,
     weights=VGG16_Weights.IMAGENET1K_V1,
 )
 
 
 backbone_vgg19: Backbone = Backbone(
+    cnn_name="VGG19",
     net=w_vgg19,
     weights=VGG19_Weights.IMAGENET1K_V1,
 )

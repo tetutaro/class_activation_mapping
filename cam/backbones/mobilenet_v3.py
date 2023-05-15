@@ -77,6 +77,7 @@ def w_mobilenet_v3_large(
 
 
 backbone_mobilenet_v3: Backbone = Backbone(
+    cnn_name="MobileNetV3",
     net=w_mobilenet_v3_large,
     weights=MobileNet_V3_Large_Weights.IMAGENET1K_V2,
 )
