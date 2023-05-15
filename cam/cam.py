@@ -454,7 +454,6 @@ def main() -> None:
     if getattr(args, "figsize", None) is None:
         image: Image = Image.open(args.path)
         args.figsize = (image.size[0] / 100, image.size[1] / 100)
-    print(args)
     # create CAM
     cam: CAM = CAM(**vars(args))
     # customize font and axes
