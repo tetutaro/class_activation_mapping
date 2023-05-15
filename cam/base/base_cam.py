@@ -29,7 +29,7 @@ from cam.base.network_weight import NetworkWeight
 from cam.base.activation_weight import ActivationWeight
 from cam.base.channel_weight import ChannelWeight
 from cam.base.layer_weight import LayerWeight
-from cam.utils.display import draw_image_heatmap
+from cam.utils.display import sigmoid, draw_image_heatmap
 
 
 class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
@@ -364,7 +364,7 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
         if title is None:
             label_name: str = self.labels[ctx.label]
             if title_score:
-                label_name += f" ({ctx.score:.4f})"
+                label_name += f" ({sigmoid(ctx.score):.4f})"
             if title_model:
                 title = self.cam_name
                 if title_label:

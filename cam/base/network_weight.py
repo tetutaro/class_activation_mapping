@@ -128,7 +128,6 @@ class NetworkWeight(CommonWeight):
         self.net_: nn.Module = (
             net(weights=self.net_weights_).to(self.device).eval()
         )
-        self.softmax_: nn.Softmax = nn.Softmax(dim=1)
         # transform function from PIL.Image to Tensor
         self.transforms: Callable[
             [Image], Tensor
@@ -460,7 +459,7 @@ class NetworkWeight(CommonWeight):
         """
         # forward network
         with torch.no_grad():
-            scores: Tensor = self.softmax_(self.net_.forward(image))
+            scores: Tensor = self.net_.forward(image)
         return scores.clone().detach()
 
     def forward(self: NetworkWeight, image: Tensor) -> Tensor:
@@ -519,7 +518,7 @@ class NetworkWeight(CommonWeight):
         acquired_list: List[Acquired] = list()
         for i in range(b):
             # forward network
-            logit: Tensor = self.softmax_(self.net_.forward(image[[i], ...]))
+            logit: Tensor = self.net_.forward(image[[i], ...])
             # get scores
             scores: Tensor = logit.clone().detach()
             # backward network
@@ -686,8 +685,8 @@ class NetworkWeight(CommonWeight):
             Tensor: scores
         """
         with torch.no_grad():
-            scores: Tensor = self.softmax_(
-                self.net_.forward_classifier(activation=activation)
+            scores: Tensor = self.net_.forward_classifier(
+                activation=activation
             )
         return scores.clone().detach()
 

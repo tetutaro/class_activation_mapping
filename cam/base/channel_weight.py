@@ -366,6 +366,7 @@ class ChannelWeight(CommonWeight):
             mask_dicts = sorted(
                 mask_dicts, key=lambda x: x["key"], reverse=True
             )[: self.n_channels_]
+        assert len(mask_dicts) > 1
         # create masked image
         masked_list: List[Tensor] = list()
         for mask_dict in mask_dicts:

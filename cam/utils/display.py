@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 """utility functions"""
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 import pandas as pd
@@ -12,6 +12,9 @@ from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 from matplotlib.image import AxesImage
 from skimage.segmentation import mark_boundaries
+
+
+sigmoid: Callable[[float], float] = lambda x: 1.0 / (1.0 + np.exp(-x))
 
 
 def is_env_notebook() -> bool:

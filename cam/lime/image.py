@@ -14,6 +14,7 @@ from matplotlib.axes import Axes
 from cam.base.network_weight import NetworkWeight
 from cam.backbones.backbone import Backbone
 from cam.utils.display import (
+    sigmoid,
     show_text,
     draw_image_boundary,
     draw_image_heatmap,
@@ -134,7 +135,7 @@ class LimeImage(NetworkWeight):
                     label=label,
                     name=self.labels[label],
                     rank=i,
-                    score=scores[0, label],
+                    score=sigmoid(scores[0, label]),
                 )
             )
             self.pred_labels_.append(label)
