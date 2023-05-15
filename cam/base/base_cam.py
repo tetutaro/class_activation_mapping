@@ -260,7 +260,6 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
         title_model: bool = False,
         title_label: bool = False,
         title_score: bool = False,
-        **kwargs: Any,
     ) -> None:
         """the main function.
 

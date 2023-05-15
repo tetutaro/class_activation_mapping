@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 from __future__ import annotations
-from typing import List, Optional, NamedTuple
+from typing import List, Optional, NamedTuple, Any
+import os
 
 import numpy as np
 from PIL import Image
@@ -35,6 +36,21 @@ class PredLabel(NamedTuple):
 
 
 class LimeImage(NetworkWeight):
+    """how to use the LimeImageExplainer.
+
+    Args:
+        backbone (Backbone): the backbone CNN model.
+        path (str): the pathname of the original image.
+        top_labels (int): number of top labels to predict.
+        num_features (int): number of features.
+        num_samples (int): number of samplings.
+        batch_size (int): max number of images in a batch.
+        n_divides (int): number of divides. (use it in IntegratedGrads)
+        n_samples (int): number of samplings. (use it in SmoothGrad)
+        sigma (float): sdev of Normal Dist. (use it in SmoothGrad)
+        ramdom_state (int): the random seed.
+    """
+
     def __init__(
         self: LimeImage,
         backbone: Backbone,
@@ -43,27 +59,22 @@ class LimeImage(NetworkWeight):
         num_features: int = 100000,
         num_samples: int = 1000,
         batch_size: int = 8,
+        n_divides: int = 8,
+        n_samples: int = 8,
+        sigma: float = 0.3,
         random_state: Optional[int] = None,
+        **kwargs: Any,
     ) -> None:
-        """how to use the LimeImageExplainer.
-
-        Args:
-            backbone (Backbone): the backbone CNN model.
-            path (str): the pathname of the original image.
-            ramdom_state (int): the random seed.
-            top_labels (int): number of top labels to predict.
-            num_features (int): number of features.
-            num_samples (int): number of samplings.
-            batch_size (int): max number of images in a batch.
-        """
         super().__init__(
-            n_divides=10,  # dummy value
-            n_samples=5,  # dummy value
-            sigma=0.3,  # dummy value
             batch_size=batch_size,
+            n_divides=n_divides,
+            n_samples=n_samples,
+            sigma=sigma,
             random_state=random_state,
             **backbone,
         )
+        if not os.path.exists(path=path):
+            raise FileNotFoundError(f"{path} is not found")
         # load image
         images: np.ndarray = np.array(Image.open(path))[np.newaxis, :]
         # predict labels
@@ -160,6 +171,7 @@ class LimeImage(NetworkWeight):
         title_model: bool = False,
         title_label: bool = False,
         title_score: bool = False,
+        **kwargs: Any,
     ) -> None:
         """the main function.
 
