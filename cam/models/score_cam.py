@@ -45,6 +45,7 @@ class ScoreCAM(BaseCAM):
         super().__init__(
             backbone=backbone,
             channel_weight="abscission",
+            normalize_softmax=True,
             n_channels=n_channels,
             random_state=random_state,
         )

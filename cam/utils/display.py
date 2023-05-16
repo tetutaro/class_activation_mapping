@@ -82,9 +82,10 @@ def draw_image_boundary(
 def draw_image_heatmap(
     image: Image,
     heatmap: np.ndarray,
-    title: Optional[str],
     fig: Figure,
     ax: Axes,
+    title: Optional[str],
+    xlabel: Optional[str] = None,
     draw_negative: bool = False,
     draw_colorbar: bool = False,
 ) -> None:
@@ -93,9 +94,10 @@ def draw_image_heatmap(
     Args:
         image (np.ndarray): the original image.
         heatmap (np.ndarray): the heatmap.
-        titie (Optional[str]): the title of the image.
         fig (Figure): the Figure instance.
         ax (Axes): the Axes instance.
+        titie (Optional[str]): the title of the image.
+        xlabel (Optional[str]): the label of x-axis of the image.
         draw_negative (bool): draw negative regions.
         draw_colorbar (bool): draw colorbar.
     """
@@ -119,7 +121,16 @@ def draw_image_heatmap(
         )
     if title is not None:
         ax.set_title(title)
-    ax.set_axis_off()
+    if xlabel is None:
+        ax.set_axis_off()
+    else:
+        ax.set_xlabel(xlabel=xlabel)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.spines["top"].set_visible(False)
+        ax.spines["bottom"].set_visible(False)
+        ax.spines["left"].set_visible(False)
+        ax.spines["right"].set_visible(False)
     if draw_colorbar:
         fig.colorbar(mappable, ax=ax, shrink=0.8)
     return

@@ -65,6 +65,7 @@ class CAM:
         channel_group (str): the method of creating groups.
         channel_cosine (bool): if True, use cosine distance at clustering.
         channel_minmax (bool): if True, adopt the best&worst channel only.
+        normalize_softmax (bool): normalize abscission score using softmax.
         n_channels (int): the number of abscission channel groups to calc.
         n_groups (Optional[int]): the number of channel groups.
         high_resolution (bool): if True, produce high resolution heatmap.
@@ -108,10 +109,11 @@ class CAM:
         # settings for ChannelWeight
         channel_weight: str = "none",
         channel_group: str = "none",
-        n_channels: int = -1,
-        n_groups: Optional[int] = None,
         channel_cosine: bool = False,
         channel_minmax: bool = False,
+        normalize_softmax: bool = False,
+        n_channels: int = -1,
+        n_groups: Optional[int] = None,
         # settings for LayerWeight
         high_resolution: bool = False,
         # settings for CommonWeight
@@ -140,10 +142,11 @@ class CAM:
             gradient_no_gap=gradient_no_gap,
             channel_weight=channel_weight,
             channel_group=channel_group,
-            n_channels=n_channels,
-            n_groups=n_groups,
             channel_cosine=channel_cosine,
             channel_minmax=channel_minmax,
+            normalize_softmax=normalize_softmax,
+            n_channels=n_channels,
+            n_groups=n_groups,
             high_resolution=high_resolution,
             random_state=random_state,
         )
@@ -368,6 +371,11 @@ def main() -> None:
         "--channel-minmax",
         action="store_true",
         help="adopt the best & worst channel group only",
+    )
+    parser.add_argument(
+        "--normalize-softmax",
+        action="store_true",
+        help="normalize abscission score using softmax",
     )
     parser.add_argument(
         "--n-channels",

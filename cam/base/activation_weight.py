@@ -7,7 +7,7 @@ import torch
 from torch import Tensor
 import torch.nn.functional as F
 
-from cam.base import channel_shape, CommonWeight
+from cam.base import channel_shape, position_shape, CommonWeight
 from cam.base.containers import Weights, SaliencyMaps
 from cam.base.context import Context
 
@@ -67,7 +67,8 @@ class ActivationWeight(CommonWeight):
         """
         fake_smaps: SaliencyMaps = SaliencyMaps()
         for activation in ctx.activations:
-            fake: Tensor = torch.ones_like(activation).to(self.device)
+            u, v = position_shape(activation)
+            fake: Tensor = torch.ones(1, 1, u, v).to(self.device)
             fake[:, :, 0, 0] = 0.0  # set 0 to the top-left corner
             fake_smaps.append(smap=fake)
         fake_smaps.finalize()

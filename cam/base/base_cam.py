@@ -7,6 +7,7 @@ import os
 import numpy as np
 import torch
 from torch import Tensor
+import torch.nn.functional as F
 from PIL import Image, ImageFilter
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
@@ -80,6 +81,7 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
         channel_group (str): the method of creating groups.
         channel_cosine (bool): if True, use cosine distance at clustering.
         channel_minmax (bool): if True, adopt the best&worst channel only.
+        normalize_softmax (bool): normalize abscission score using softmax.
         n_channels (int): the number of abscission channel groups to calc.
         n_groups (Optional[int]): the number of channel groups.
         high_resolution (bool): if True, produce high resolution heatmap.
@@ -110,6 +112,7 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
         n_groups: Optional[int] = None,
         channel_cosine: bool = False,
         channel_minmax: bool = False,
+        normalize_softmax: bool = False,
         # settings for LayerWeight
         high_resolution: bool = False,
         # settings for CommonWeight
@@ -133,6 +136,7 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
             n_groups=n_groups,
             channel_cosine=channel_cosine,
             channel_minmax=channel_minmax,
+            normalize_softmax=normalize_softmax,
             high_resolution=high_resolution,
             random_state=random_state,
             **backbone,
@@ -339,6 +343,11 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
             ),
             label=label,
             score=acquired.scores.detach().squeeze().cpu().numpy()[label],
+            logit=F.softmax(acquired.scores, dim=1)
+            .detach()
+            .squeeze()
+            .cpu()
+            .numpy()[label],
             activations=acquired.activations.clone(),
             gradients=acquired.gradients.clone(),
         )
@@ -371,13 +380,18 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
                     title += f" ({label_name})"
             elif title_label:
                 title = label_name
+        # xlabel
+        xlabel: Optional[str] = None
+        if self.n_groups_ is not None:
+            xlabel = f"# of clusters = {self.n_groups_}"
         # draw the heatmap
         fig = draw_image_heatmap(
             image=ctx.raw_image,
             heatmap=heatmap,
-            title=title,
             fig=fig,
             ax=ax,
+            title=title,
+            xlabel=xlabel,
             draw_negative=draw_negative,
             draw_colorbar=draw_colorbar,
         )

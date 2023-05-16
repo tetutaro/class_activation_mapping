@@ -96,6 +96,7 @@ class LimeImage(NetworkWeight):
             hide_color=0,
             random_seed=random_state,
         )
+        self.n_groups_: Optional[int] = None  # for compatibility
         return
 
     def _predict(self: LimeImage, images: np.ndarray) -> np.ndarray:
@@ -223,9 +224,9 @@ class LimeImage(NetworkWeight):
         draw_image_heatmap(
             image=self.explain_.image,
             heatmap=heatmap,
-            title=title,
             fig=fig,
             ax=ax,
+            title=title,
             draw_negative=draw_negative,
             draw_colorbar=draw_colorbar,
         )

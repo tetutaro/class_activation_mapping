@@ -32,6 +32,7 @@ class ChannelWeight(CommonWeight):
         channel_group (str): the method of creating groups.
         channel_cosine (bool): if True, use cosine distance at clustering.
         channel_minmax (bool): if True, adopt the best&worst channel only.
+        normalize_softmax (bool): normalize abscission score using softmax.
         n_channels (int): the number of abscission channel groups to calc.
         n_groups (Optional[int]): the number of channel groups.
     """
@@ -42,6 +43,7 @@ class ChannelWeight(CommonWeight):
         channel_group: str,
         channel_cosine: bool,
         channel_minmax: bool,
+        normalize_softmax: bool,
         n_channels: int,
         n_groups: Optional[int],
         **kwargs: Any,
@@ -52,6 +54,7 @@ class ChannelWeight(CommonWeight):
         self.channel_group: str = channel_group
         self.channel_cosine_: bool = channel_cosine
         self.channel_minmax_: bool = channel_minmax
+        self.normalize_softmax_: bool = normalize_softmax
         self.n_channels_: int = n_channels
         self.n_groups_: Optional[int] = n_groups
         if self.channel_weight == "none":
@@ -100,7 +103,9 @@ class ChannelWeight(CommonWeight):
         # estimate the max number of groups based on the Sturges' Rule
         n_data: int = features.shape[0]
         max_groups: int = int(np.ceil(np.log2(n_data))) + 2
-        n_groups_list: List[int] = list(range(2, max_groups))
+        if max_groups < 5:
+            return 3
+        n_groups_list: List[int] = list(range(3, max_groups))
         # k-Means for earch number of groups
         inertia_list: List[float] = list()
         for n_groups in n_groups_list:
@@ -157,6 +162,7 @@ class ChannelWeight(CommonWeight):
         Returns:
             Tensor: channel group map (group x channel).
         """
+        k: int = channel_shape(smap)
         # create features to cluster channels
         features: np.ndarray = self._create_features(smap=smap)
         if self.n_groups_ is None:
@@ -179,7 +185,13 @@ class ChannelWeight(CommonWeight):
             group_weight: np.ndarray = np.where(labels == group, 1.0, 0.0)
             group_weight /= group_weight.sum()
             group_weight_list.append(group_weight.tolist())
-        return torch.tensor(group_weight_list).to(self.device)
+        gmap: Tensor = torch.tensor(group_weight_list).to(self.device)
+        if DEBUG:
+            assert channel_shape(gmap) == k
+            assert torch.allclose(
+                gmap.sum(dim=1), torch.ones(batch_shape(gmap))
+            )
+        return gmap
 
     def _channel_group_spectral(
         self: ChannelWeight,
@@ -195,6 +207,7 @@ class ChannelWeight(CommonWeight):
         Returns:
             Tensor: channel group map (group x channel).
         """
+        k: int = channel_shape(smap)
         # create features to cluster channels
         features: np.ndarray = self._create_features(smap=smap)
         if self.n_groups_ is None:
@@ -219,7 +232,13 @@ class ChannelWeight(CommonWeight):
             group_weight: np.ndarray = np.where(labels == group, 1.0, 0.0)
             group_weight /= group_weight.sum()
             group_weight_list.append(group_weight.tolist())
-        return torch.tensor(group_weight_list).to(self.device)
+        gmap: Tensor = torch.tensor(group_weight_list).to(self.device)
+        if DEBUG:
+            assert channel_shape(gmap) == k
+            assert torch.allclose(
+                gmap.sum(dim=1), torch.ones(batch_shape(gmap))
+            )
+        return gmap
 
     # ## functions to create weight for each channel group
 
@@ -277,8 +296,10 @@ class ChannelWeight(CommonWeight):
         Gs, ss, _ = torch.linalg.svd(GP_std, full_matrices=False)
         # retrieve the first eigen-vector and normalize it
         weight: Tensor = F.normalize(Gs.real[:, ss.argmax()], dim=0)
-        # test the eigen-vector may have the opposite sign
-        if (weight.view(1, g, 1, 1) * F.relu(g_smap)).sum() < 0:
+        # check the sign of weight
+        if (
+            weight.view(1, g, 1, 1) * F.relu(g_smap - g_smap.median())
+        ).sum() < 0:
             weight = -weight
         return weight
 
@@ -367,6 +388,11 @@ class ChannelWeight(CommonWeight):
                 mask_dicts, key=lambda x: x["key"], reverse=True
             )[: self.n_channels_]
         assert len(mask_dicts) > 1
+        # get baseline score and logit
+        base_score: Tensor = F.sigmoid(
+            ctx.forward_fn(image=ctx.blurred_image)
+        )[:, ctx.label].squeeze()
+        base_logit: Tensor = (base_score / (1.0 - base_score)).log()
         # create masked image
         masked_list: List[Tensor] = list()
         for mask_dict in mask_dicts:
@@ -375,11 +401,18 @@ class ChannelWeight(CommonWeight):
             masked += ctx.blurred_image * (1.0 - mask_dict["mask"])
             masked_list.append(masked)
         maskedes: Tensor = torch.cat(masked_list, dim=0)
-        # forward network then retrieve reduced score
-        reduced_scores: Tensor = ctx.forward_fn(image=maskedes)[:, ctx.label]
+        # forward network then retrieve abscission score and logit
+        absc_score: Tensor = F.sigmoid(ctx.forward_fn(image=maskedes))[
+            :, ctx.label
+        ]
+        absc_logit: Tensor = (absc_score / (1.0 - absc_score)).log()
         del maskedes
-        # calc CIC score and normalize it
-        cic_scores = F.normalize(reduced_scores - ctx.score, dim=0)
+        # calc CIC score and normalize
+        cic_scores: Tensor
+        if self.normalize_softmax_:
+            cic_scores = F.softmax(absc_logit - base_logit, dim=0)
+        else:
+            cic_scores = F.normalize(absc_logit - base_logit, dim=0)
         # create weight
         weight: Tensor
         if batch_shape(cic_scores) < g:
@@ -418,9 +451,7 @@ class ChannelWeight(CommonWeight):
         # weight and merge channels for each layers
         merged_smaps: SaliencyMaps = SaliencyMaps()
         for smap in smaps:
-            b, k, u, v = smap.size()
-            if DEBUG:
-                assert b == 1
+            _, k, u, v = smap.size()
             if k == 1:
                 # channel saliency map is already created
                 merged_smaps.append(smap.clone())
@@ -453,18 +484,11 @@ class ChannelWeight(CommonWeight):
                 )
             # create channel group map
             gmap: Tensor = group_fn(smap=smap, ctx=ctx)
-            if DEBUG:
-                assert channel_shape(gmap) == k
-                assert torch.allclose(
-                    gmap.sum(dim=1), torch.ones(batch_shape(gmap))
-                )
             # group saliency map
             g: int = batch_shape(gmap)
             g_smap: Tensor = (gmap @ smap.view(k, -1)).view(1, g, u, v)
             # weight grouped saliency map and sum over channels
             g_weight: Tensor = weight_fn(g_smap=g_smap, gmap=gmap, ctx=ctx)
-            if DEBUG:
-                assert len(g_weight.shape) == 1
             if self.channel_minmax_:
                 # cognition-base and cognition-scissors
                 # cognition-base is the channel group that has
@@ -476,13 +500,16 @@ class ChannelWeight(CommonWeight):
                 # other values of the weight is set to 0.
                 base: int = g_weight.argmax().detach().cpu().numpy().ravel()[0]
                 scis: int = g_weight.argmin().detach().cpu().numpy().ravel()[0]
+                val: float = float(g_weight.detach().cpu().numpy()[base])
                 g_weight = torch.zeros(g).to(self.device)
-                g_weight[base] = 1.0
-                g_weight[scis] = -1.0
+                g_weight[base] = val
+                g_weight[scis] = -(1.0 - val)
             g_weight = g_weight.view(1, g, 1, 1)
-            merged_smaps.append(
-                smap=(g_weight * g_smap).sum(dim=1, keepdim=True)
-            )
+            # merge channels (weighted sum)
+            g_smap = (g_weight * g_smap).sum(dim=1, keepdim=True)
+            # centerize
+            g_smap -= g_smap.median()
+            merged_smaps.append(smap=g_smap)
         # finelize
         merged_smaps.finalize()
         smaps.clear()

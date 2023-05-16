@@ -25,6 +25,7 @@ class Context(NamedTuple):
     blurred_image: Tensor
     label: int
     score: float
+    logit: float
     activations: Weights
     gradients: Weights
 
