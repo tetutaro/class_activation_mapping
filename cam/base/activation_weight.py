@@ -112,27 +112,48 @@ class ActivationWeight(CommonWeight):
         weights.finalize()
         return weights
 
-    def _arrange_gradient(
+    def _clamp_gradient(
         self: ActivationWeight,
-        layer: int,
         gradient: Tensor,
     ) -> Tensor:
-        """arrange gradient.
+        """clamp inf and -inf on 0.
 
         Args:
-            layer (int): layer offset (0 == last Conv. Layer).
             gradient (Tensor): gradient.
 
         Returns:
-            Tensor: arranged_gradient.
+            Tensor: clamped gradient.
         """
+        # gradient_nan: np.ndarray = (
+        #     (gradient * ~gradient.isinf()).detach().cpu().numpy()
+        # )
+        # gradient_max: float = np.nanmax(gradient_nan)
+        # gradient_min: float = np.nanmin(gradient_nan)
+        # return gradient.clamp(min=gradient_min, max=gradient_max)
+        return torch.where(gradient.isinf(), 0.0, gradient)
+
+    def _arrange_weight(
+        self: ActivationWeight,
+        layer: int,
+        weight: Tensor,
+    ) -> Tensor:
+        """arrange weight.
+
+        Args:
+            layer (int): layer offset (0 == last Conv. Layer).
+            weight (Tensor): weight.
+
+        Returns:
+            Tensor: arranged weight.
+        """
+        # gap or not
         if layer == 0:
             if not self.gradient_no_gap_:
-                k: int = channel_shape(gradient)
-                gradient = gradient.view(1, k, -1).mean(dim=2).view(1, k, 1, 1)
+                k: int = channel_shape(weight)
+                weight = weight.view(1, k, -1).mean(dim=2).view(1, k, 1, 1)
         else:
-            gradient = F.relu(gradient)
-        return gradient
+            weight = F.relu(weight)
+        return weight
 
     def _activation_weight_gradient(
         self: ActivationWeight,
@@ -148,12 +169,9 @@ class ActivationWeight(CommonWeight):
         """
         weights: Weights = Weights()
         for i, gradient in enumerate(ctx.gradients):
-            weights.append(
-                weight=self._arrange_gradient(
-                    layer=i,
-                    gradient=gradient.clone(),
-                )
-            )
+            # weight = gradient
+            weight: Tensor = self._clamp_gradient(gradient=gradient)
+            weights.append(weight=self._arrange_weight(layer=i, weight=weight))
         weights.finalize()
         return weights
 
@@ -173,10 +191,11 @@ class ActivationWeight(CommonWeight):
         for i, (activation, gradient) in enumerate(
             zip(ctx.activations, ctx.gradients)
         ):
-            k: int = channel_shape(activation)
+            gradient = self._clamp_gradient(gradient=gradient)
             # alpha = gradient ** 2 /
             #         2 * (gradient ** 2) + SUM(avtivation * (gradient ** 3))
             # SUM: sum per channels over positions
+            k: int = channel_shape(activation)
             alpha_numer: Tensor = gradient.pow(2)
             alpha_denom: Tensor = 2 * alpha_numer
             alpha_denom += (
@@ -188,12 +207,8 @@ class ActivationWeight(CommonWeight):
             alpha_denom = alpha_denom.clamp(min=1.0)  # for stability
             alpha: Tensor = alpha_numer / alpha_denom
             # weight = alpha * gradient
-            weights.append(
-                weight=self._arrange_gradient(
-                    layer=i,
-                    gradient=alpha * gradient,
-                )
-            )
+            weight: Tensor = alpha * gradient
+            weights.append(weight=self._arrange_weight(layer=i, weight=weight))
         weights.finalize()
         return weights
 
@@ -213,12 +228,10 @@ class ActivationWeight(CommonWeight):
         for i, (activation, gradient) in enumerate(
             zip(ctx.activations, ctx.gradients)
         ):
-            weights.append(
-                weight=self._arrange_gradient(
-                    layer=i,
-                    gradient=gradient * activation,
-                )
-            )
+            gradient = self._clamp_gradient(gradient=gradient)
+            # weight = gradient * activation
+            weight: Tensor = gradient * activation
+            weights.append(weight=self._arrange_weight(layer=i, weight=weight))
         weights.finalize()
         return weights
 
