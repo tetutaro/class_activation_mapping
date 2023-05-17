@@ -8,8 +8,8 @@ import numpy as np
 from PIL import Image
 from lime.lime_image import LimeImageExplainer, ImageExplanation
 import torch
-from matplotlib.figure import Figure
 from matplotlib.axes import Axes
+from matplotlib.image import AxesImage
 
 from cam.base.network_weight import NetworkWeight
 from cam.backbones.backbone import Backbone
@@ -163,31 +163,30 @@ class LimeImage(NetworkWeight):
 
     def draw(
         self: LimeImage,
-        fig: Figure,
         ax: Axes,
         rank: Optional[int] = None,
         label: Optional[int] = None,
         draw_negative: bool = False,
-        draw_colorbar: bool = False,
         title: Optional[str] = None,
         title_model: bool = False,
         title_label: bool = False,
         title_score: bool = False,
         **kwargs: Any,
-    ) -> None:
+    ) -> AxesImage:
         """the main function.
 
         Args:
+            ax (Optinonal[Axes): the Axes instance.
             rank (Optional[int]): the rank of the target class.
             label (Optional[int]): the label of the target class.
-            fig (Optional[Figure]): the Figure instance.
-            ax (Optinonal[Axes): the Axes instance.
             draw_negative (bool): draw negative regions.
-            draw_colorbar (bool): draw colorbar.
             title (Optional[str]): title of heatmap.
             title_model (bool): show model name in title.
             title_label (bool): show label name in title.
             title_score (bool): show score in title.
+
+        Returns:
+            AxesImage: colorbar.
         """
         if rank is None and label is None:
             rank = 0
@@ -221,13 +220,10 @@ class LimeImage(NetworkWeight):
             elif title_label:
                 title = label_name
         # draw the heatmap
-        draw_image_heatmap(
+        return draw_image_heatmap(
             image=self.explain_.image,
             heatmap=heatmap,
-            fig=fig,
             ax=ax,
             title=title,
             draw_negative=draw_negative,
-            draw_colorbar=draw_colorbar,
         )
-        return

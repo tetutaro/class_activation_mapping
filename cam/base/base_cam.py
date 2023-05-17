@@ -7,10 +7,9 @@ import os
 import numpy as np
 import torch
 from torch import Tensor
-import torch.nn.functional as F
 from PIL import Image, ImageFilter
-from matplotlib.figure import Figure
 from matplotlib.axes import Axes
+from matplotlib.image import AxesImage
 
 from cam.backbones.backbone import Backbone
 from cam.base import (
@@ -21,7 +20,6 @@ from cam.base import (
     channel_weights,
     group_types,
     TargetLayer,
-    batch_shape,
 )
 from cam.base.acquired import Acquired
 from cam.base.context import Context
@@ -30,7 +28,12 @@ from cam.base.network_weight import NetworkWeight
 from cam.base.activation_weight import ActivationWeight
 from cam.base.channel_weight import ChannelWeight
 from cam.base.layer_weight import LayerWeight
-from cam.utils.display import sigmoid, draw_image_heatmap
+from cam.utils.display import (
+    sigmoid,
+    draw_image_heatmap,
+    draw_histogram,
+    draw_inertias,
+)
 
 
 class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
@@ -152,6 +155,9 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
         # set random seeds
         if self.random_state is not None:
             self._set_random_seeds()
+        # hidden flag
+        self.draw_distribution_: bool = False
+        self.draw_inertias_: bool = False
         return
 
     def set_cam_name(self: BaseCAM, cam_name: str) -> None:
@@ -199,6 +205,36 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
         if self.channel_group not in group_types:
             _raise_error(name="channel_group")
         return
+
+    def _assert_rank_label(
+        self: BaseCAM,
+        rank: Optional[int],
+        label: Optional[int],
+    ) -> Optional[int]:
+        """assert label and rank.
+
+        Args:
+            label (Optional[int]): label.
+            rank (Optional[int]): rank.
+
+        Returns:
+            Optional[int]: rank.
+
+        Raises:
+            ValueError: too large rank/label.
+        """
+        if label is None:
+            if rank is None:
+                rank = 1
+            if rank >= self.n_labels:
+                raise ValueError(
+                    f"rank ({rank}) is too large (< {self.n_labels})"
+                )
+        elif label >= self.n_labels:
+            raise ValueError(
+                f"label ({label}) is too large (< {self.n_labels})"
+            )
+        return rank
 
     def _convert_target(self: BaseCAM, target: TargetLayer) -> None:
         """check target and convert target from TargetLayer to List[str]
@@ -248,45 +284,100 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
                 raise ValueError('target should be "last"')
         return target_layers
 
+    def _set_title(
+        self: BaseCAM,
+        title: Optional[str],
+        title_model: bool,
+        title_label: bool,
+        title_score: bool,
+        ctx: Context,
+    ) -> Optional[str]:
+        """set title.
+
+        Args:
+            title (Optional[str]): title of heatmap.
+            title_model (bool): show model name in title.
+            title_label (bool): show label name in title.
+            title_score (bool): show score in title.
+            ctx (Context): context of this process.
+
+        Returns:
+            Optional[str]: title.
+        """
+        if title is not None:
+            return title
+        label_name: str = self.labels[ctx.label]
+        if len(label_name) > 12:
+            label_names: List[str]
+            if " " in label_name:
+                label_names = label_name.split()
+            else:
+                label_names = label_name.split("-")
+            label_name = " ".join(
+                [x[0].upper() + "." for x in label_names[:-1]]
+            )
+            label_name += " " + label_names[-1]
+        if title_score:
+            label_name += f" ({sigmoid(ctx.score):.4f})"
+        if title_model:
+            title = self.cam_name
+            if title_label:
+                title += f" ({label_name})"
+        elif title_label:
+            title = label_name
+        return title
+
+    def _set_xlabel(self: BaseCAM) -> Optional[str]:
+        """set xlabel
+
+        Returns:
+            Optional[str]: xlabel
+        """
+        xlabel: Optional[str] = None
+        if self.n_groups_ is not None:
+            xlabel = f"# of clusters = {self.n_groups_}"
+        return xlabel
+
     # ## main function
 
     def draw(
         self: BaseCAM,
         path: str,
         target: TargetLayer,
-        fig: Figure,
         ax: Axes,
         rank: Optional[int] = None,
         label: Optional[int] = None,
         draw_negative: bool = False,
-        draw_colorbar: bool = False,
         title: Optional[str] = None,
         title_model: bool = False,
         title_label: bool = False,
         title_score: bool = False,
         **kwargs: Any,
-    ) -> None:
+    ) -> Optional[AxesImage]:
         """the main function.
 
         Args:
             path (str): the pathname of the original image.
             target (TargetLayer): target Conv. Layers to retrieve activations.
-            fig (Figure): the Figure instance.
             ax (Axes): the Axes instance.
             rank (Optional[int]): the rank of the target class.
             label (Optional[int]): the label of the target class.
             draw_negative (bool): draw negative regions or not.
-            draw_colorbar (bool): draw colorbar.
             title (Optional[str]): title of heatmap.
             title_model (bool): show model name in title.
             title_label (bool): show label name in title.
             title_score (bool): show score in title.
+
+        Returns:
+            Optional[AxesImage]: colorbar.
 
         Raises:
             ValueError: parameters are invalid.
             IndexError: target is out of index.
             FileNotFoundError: path is not exists.
         """
+        # assert label and rank
+        rank = self._assert_rank_label(rank=rank, label=label)
         # convert target to List[str]
         target_layers: List[str] = self._convert_target(target=target)
         # load the original image
@@ -294,17 +385,9 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
             raise FileNotFoundError(f"{path} is not exists")
         raw_image: Image = Image.open(path)
         image: Tensor = self.transforms(raw_image).unsqueeze(0).to(self.device)
+        # decide the target label
         if label is None:
-            # decide the target label
-            if rank is None:
-                rank = 1
-            if rank >= self.n_labels:
-                raise ValueError(
-                    f"rank ({rank}) is too large (< {self.n_labels})"
-                )
             scores: Tensor = self.forward(image=image)
-            if DEBUG:
-                assert batch_shape(scores) == 1
             label = (
                 scores.detach()
                 .argsort(dim=1, descending=True)
@@ -313,10 +396,6 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
                 .numpy()[rank]
             )
             del scores
-        elif label >= self.n_labels:
-            raise ValueError(
-                f"label ({label}) is too large (< {self.n_labels})"
-            )
         # forward network
         acquired: Acquired = self.acquires_grad(
             target_layers=target_layers,
@@ -343,11 +422,6 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
             ),
             label=label,
             score=acquired.scores.detach().squeeze().cpu().numpy()[label],
-            logit=F.softmax(acquired.scores, dim=1)
-            .detach()
-            .squeeze()
-            .cpu()
-            .numpy()[label],
             activations=acquired.activations.clone(),
             gradients=acquired.gradients.clone(),
         )
@@ -363,38 +437,45 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
         if DEBUG:
             assert heatmap.shape == (ctx.height, ctx.width)
         del smap
+        # title
+        title = self._set_title(
+            title=title,
+            title_model=title_model,
+            title_label=title_label,
+            title_score=title_score,
+            ctx=ctx,
+        )
+        # xlabel
+        xlabel: Optional[str] = self._set_xlabel()
+        # hidden output
+        if self.draw_distribution_:
+            draw_histogram(dist=heatmap, ax=ax, title=title)
+            ctx.clear()
+            return
+        if self.draw_inertias_:
+            draw_inertias(
+                inertias=self.inertias_,
+                n_clusters=self.n_groups_,
+                ax=ax,
+                title=title,
+            )
+            ctx.clear()
+            return
         # normalize heatmap
         heatmap = heatmap / heatmap.max()
         if draw_negative:
             heatmap = heatmap.clip(min=-1.0, max=1.0)
         else:
             heatmap = heatmap.clip(min=0.0, max=1.0)
-        # title
-        if title is None:
-            label_name: str = self.labels[ctx.label]
-            if title_score:
-                label_name += f" ({sigmoid(ctx.score):.4f})"
-            if title_model:
-                title = self.cam_name
-                if title_label:
-                    title += f" ({label_name})"
-            elif title_label:
-                title = label_name
-        # xlabel
-        xlabel: Optional[str] = None
-        if self.n_groups_ is not None:
-            xlabel = f"# of clusters = {self.n_groups_}"
         # draw the heatmap
-        fig = draw_image_heatmap(
+        colorbar: AxesImage = draw_image_heatmap(
             image=ctx.raw_image,
             heatmap=heatmap,
-            fig=fig,
             ax=ax,
             title=title,
             xlabel=xlabel,
             draw_negative=draw_negative,
-            draw_colorbar=draw_colorbar,
         )
         # clear cache
         ctx.clear()
-        return
+        return colorbar

@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 """utility functions"""
-from typing import Callable, Optional
+from typing import List, Dict, Callable, Optional
 
 import numpy as np
 import pandas as pd
 from IPython.display import display, Markdown
 from IPython import get_ipython
 from PIL import Image
-from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 from matplotlib.image import AxesImage
 from skimage.segmentation import mark_boundaries
+import seaborn as sns
 
 
 sigmoid: Callable[[float], float] = lambda x: 1.0 / (1.0 + np.exp(-x))
@@ -82,24 +82,20 @@ def draw_image_boundary(
 def draw_image_heatmap(
     image: Image,
     heatmap: np.ndarray,
-    fig: Figure,
     ax: Axes,
     title: Optional[str],
     xlabel: Optional[str] = None,
     draw_negative: bool = False,
-    draw_colorbar: bool = False,
-) -> None:
+) -> AxesImage:
     """draw the original image and the heatmap over the original image.
 
     Args:
         image (np.ndarray): the original image.
         heatmap (np.ndarray): the heatmap.
-        fig (Figure): the Figure instance.
         ax (Axes): the Axes instance.
         titie (Optional[str]): the title of the image.
         xlabel (Optional[str]): the label of x-axis of the image.
         draw_negative (bool): draw negative regions.
-        draw_colorbar (bool): draw colorbar.
     """
     # check values of heatmap
     assert heatmap.max() <= 1.0
@@ -108,15 +104,15 @@ def draw_image_heatmap(
     else:
         assert heatmap.min() >= -1.0
     # draw original image
-    ax.imshow(image)
+    _ = ax.imshow(image)
     # draw overlay (heatmap)
-    mappable: AxesImage
+    colorbar: AxesImage
     if draw_negative:
-        mappable = ax.imshow(
+        colorbar = ax.imshow(
             heatmap, cmap="RdBu_r", vmin=-1.0, vmax=1.0, alpha=0.5
         )
     else:
-        mappable = ax.imshow(
+        colorbar = ax.imshow(
             heatmap, cmap="jet", vmin=0.0, vmax=1.0, alpha=0.5
         )
     if title is not None:
@@ -131,6 +127,60 @@ def draw_image_heatmap(
         ax.spines["bottom"].set_visible(False)
         ax.spines["left"].set_visible(False)
         ax.spines["right"].set_visible(False)
-    if draw_colorbar:
-        fig.colorbar(mappable, ax=ax, shrink=0.8)
+    return colorbar
+
+
+def draw_histogram(
+    dist: np.ndarray,
+    ax: Axes,
+    title: Optional[str] = None,
+) -> None:
+    """draw elbow point of inertias
+
+    Args:
+        dist (np.ndarray): distribution.
+        ax (Axes): the Axes instance.
+        title (Optional[str]): the title.
+    """
+    sns.histplot(data=dist.reshape(-1), stat="probability", bins=100, ax=ax)
+    if title is not None:
+        ax.set_title(title)
+    return
+
+
+def draw_inertias(
+    inertias: Dict[str, List[float]],
+    n_clusters: int,
+    ax: Axes,
+    title: Optional[str] = None,
+) -> None:
+    """draw elbow point of inertias
+
+    Args:
+        inertias (Dict[str, List[float]]): inertias,
+        n_clusters (int): elbow point.
+        fig (Figure): the Figure instance.
+        ax (Axes): the Axes instance.
+        title (Optional[str]): the title.
+    """
+    assert "inertia" in list(inertias.keys())
+    assert "n_clusters" in list(inertias.keys())
+    pd.DataFrame(inertias).plot(
+        kind="line", x="n_clusters", y="inertia", ax=ax
+    )
+    if n_clusters in inertias["n_clusters"]:
+        off: int = inertias["n_clusters"].index(n_clusters)
+        val: float = inertias["inertia"][off]
+        ax.plot(
+            [n_clusters],
+            [val],
+            marker="o",
+            markersize=10,
+            markerfacecolor="red",
+        )
+    if title is not None:
+        ax.set_title(title)
+    ax.set_xlabel(xlabel="# of clusters")
+    ax.set_ylabel(ylabel="inertia")
+    ax.legend().remove()
     return

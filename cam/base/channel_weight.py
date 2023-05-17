@@ -59,6 +59,7 @@ class ChannelWeight(CommonWeight):
         self.n_groups_: Optional[int] = n_groups
         if self.channel_weight == "none":
             self.channel_minmax_ = False
+        self.inertias_: Dict[str, List[float]]
         return
 
     # ## functions to create channel group map (channel -> channel group)
@@ -125,6 +126,10 @@ class ChannelWeight(CommonWeight):
                 curve="convex",
                 direction="decreasing",
             )
+        self.inertias_ = {
+            "n_clusters": [float(x) for x in n_groups_list],
+            "inertia": inertia_list,
+        }
         n_groups: int
         if kneedle.elbow is None:
             n_groups = max_groups

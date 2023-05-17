@@ -19,6 +19,7 @@ ipython = "^8.13.0"
 tabulate = "^0.9.0"
 kneed = "^0.8.3"
 pandas = "^2.0.1"
+seaborn = "^0.12.2"
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.12.0"

@@ -8,8 +8,8 @@ import os
 from argparse import ArgumentParser, Namespace
 
 import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
 from matplotlib.axes import Axes
+from matplotlib.image import AxesImage
 from PIL import Image
 
 from cam.backbones.backbone import Backbone
@@ -212,49 +212,45 @@ class CAM:
         self: CAM,
         path: str,
         target: TargetLayer,
-        fig: Figure,
         ax: Axes,
         rank: Optional[int] = None,
         label: Optional[int] = None,
         draw_negative: bool = False,
-        draw_colorbar: bool = False,
         title: Optional[str] = None,
         title_model: bool = False,
         title_label: bool = False,
         title_score: bool = False,
         **kwargs: Any,
-    ) -> None:
+    ) -> Optional[AxesImage]:
         """draw overlayed heatmap on the original image.
 
         Args:
             path (str): the pathname of the original image.
             target (TargetLayer): target Conv. Layers to retrieve activations.
-            fig (Figure): the Figure instance.
             ax (Axes): the Axes instance.
             rank (Optional[int]): the rank of the target class.
             label (Optional[int]): the label of the target class.
             draw_negative (bool): draw negative regions or not.
-            draw_colorbar (bool): draw colorbar.
             title (Optional[str]): title of heatmap.
             title_model (bool): show model name in title.
             title_label (bool): show label name in title.
             title_score (bool): show score in title.
+
+        Returns:
+            Optional[AxesImage]: colorbar.
         """
-        self.cam.draw(
+        return self.cam.draw(
             path=path,
             target=target,
-            fig=fig,
             ax=ax,
             rank=rank,
             label=label,
             draw_negative=draw_negative,
-            draw_colorbar=draw_colorbar,
             title=title,
             title_model=title_model,
             title_label=title_label,
             title_score=title_score,
         )
-        return
 
 
 def main() -> None:
@@ -480,7 +476,9 @@ def main() -> None:
     # draw heatmap
     with plt.rc_context(rc=rc):
         fig, ax = plt.subplots(figsize=args.figsize)
-        cam.draw(fig=fig, ax=ax, **vars(args))
+        colorbar: Optional[AxesImage] = cam.draw(ax=ax, **vars(args))
+        if colorbar is not None and args.draw_colorbar:
+            fig.colorbar(colorbar, ax=ax, shrink=0.8)
         fig.tight_layout()
         plt.savefig(args.output)
         plt.clf()
