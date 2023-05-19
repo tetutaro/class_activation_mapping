@@ -151,7 +151,7 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
         # set flags
         if activation_weight == "class":
             self.target_last_layer_ = True
-            self.set_class_weights(class_weights=self.get_class_weights())
+            self.set_class_weight(class_weight=self.get_class_weight())
         if channel_weight == "ablation":
             self.target_last_layer_ = True
         if channel_group != "none":

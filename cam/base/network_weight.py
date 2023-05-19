@@ -233,14 +233,14 @@ class NetworkWeight(CommonWeight):
                 modname += f".{n}"
         cmnd: str
         cmnd = f"""self.handles_.append(
-            self.net_.features{modname}.register_forward_hook(
+            self.net_{modname}.register_forward_hook(
                 {forward_fn}
             )
         )"""
         exec(cmnd)
         if backward_fn is not None:
             cmnd = f"""self.handles_.append(
-                self.net_.features{modname}.register_full_backward_hook(
+                self.net_{modname}.register_full_backward_hook(
                     {backward_fn}
                 )
             )"""
@@ -284,20 +284,9 @@ class NetworkWeight(CommonWeight):
         self.conv_layers = list()
         # get names of all Conv. Layer
         info_conv_layers: Dict[int, Dict] = dict()
-        all_conv_layers: DefaultDict[List] = defaultdict(list)
-        for module in self.net_.features.named_modules():
-            if isinstance(module[1], nn.ReLU):
-                # https://github.com/frgfm/torch-cam/issues/72
-                module[1].inplace = False
-                continue
-            if isinstance(module[1], nn.Conv2d):
-                block: int = int(module[0].split(".")[0])
-                if block == 0:
-                    # ignore the first block
-                    # because the first block just expands color information
-                    # to following channels
-                    continue
-                all_conv_layers[block].append(module[0])
+        all_conv_layers: DefaultDict[
+            int, List[str]
+        ] = self.net_.get_all_conv_layers()
         # select the last Conv. Layer for each blocks
         for block, names in all_conv_layers.items():
             last_name: str = names[-1]
@@ -383,21 +372,7 @@ class NetworkWeight(CommonWeight):
 
     # ## functions about weights of the classifier part of CNN
 
-    def _get_avgpool_size(self: NetworkWeight) -> int:
-        """calc the output size of the avgpool part.
-
-        Returns:
-            int: the size of the avgpool part.
-        """
-        avgpool_size: int = 1
-        if isinstance(self.net_.avgpool.output_size, int):
-            avgpool_size = self.net_.avgpool.output_size
-        else:
-            for size in self.net_.avgpool.output_size:
-                avgpool_size *= size
-        return avgpool_size
-
-    def get_class_weights(self: NetworkWeight) -> Tensor:
+    def get_class_weight(self: NetworkWeight) -> Tensor:
         """calc the weight of Linear Layer of the classifier part.
 
         Returns:
@@ -408,20 +383,9 @@ class NetworkWeight(CommonWeight):
         # finally, the shape of the weight should be (n_labels x n_channels).
         # n_channels is the number of channels of the last Conv. Layer.
         # n_labels is the number of labels to predict.
-        cweight: Optional[Tensor] = None
-        for module in self.net_.classifier.named_modules():
-            if isinstance(module[1], nn.modules.linear.Linear):
-                for param in module[1].named_parameters():
-                    if param[0] == "weight":
-                        weight: Tensor = (
-                            param[1].data.clone().detach().to(self.device)
-                        )
-                        if cweight is None:
-                            cweight = weight
-                        else:
-                            cweight = weight @ cweight
+        cweight: Tensor = self.net_.get_class_weight()
         # get the output size of the avgpool part
-        avgpool_size: int = self._get_avgpool_size()
+        avgpool_size: int = self.net_.get_avgpool_size()
         if avgpool_size == 1:
             if DEBUG:
                 assert batch_shape(cweight) == self.n_labels

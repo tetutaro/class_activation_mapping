@@ -39,19 +39,19 @@ class ActivationWeight(CommonWeight):
         self.gradient_no_gap_: bool = gradient_no_gap
         if self.activation_weight in ["none", "class"]:
             self.gradient_no_gap_ = True
-        self.class_weights_: Tensor
+        self.class_weight_: Tensor
         return
 
-    def set_class_weights(
+    def set_class_weight(
         self: ActivationWeight,
-        class_weights: Tensor,
+        class_weight: Tensor,
     ) -> None:
         """set class weights.
 
         Args:
-            class_weights (Tensor): class weights.
+            class_weight (Tensor): class weights.
         """
-        self.class_weights_ = class_weights
+        self.class_weight_ = class_weight
         return
 
     def _fake_smaps(self: ActivationWeight, ctx: Context) -> SaliencyMaps:
@@ -105,8 +105,8 @@ class ActivationWeight(CommonWeight):
         """
         weights: Weights = Weights()
         weights.append(
-            weight=self.class_weights_[[ctx.label], :].view(
-                1, channel_shape(self.class_weights_), 1, 1
+            weight=self.class_weight_[[ctx.label], :].view(
+                1, channel_shape(self.class_weight_), 1, 1
             )
         )
         weights.finalize()
