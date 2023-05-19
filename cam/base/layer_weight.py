@@ -39,7 +39,7 @@ class LayerWeight(CommonWeight):
 
     def _high_resolution(
         self: LayerWeight,
-        smap: Tensor,
+        final_smap: Tensor,
         activation: Tensor,
         factor: int,
     ) -> Tensor:
@@ -47,13 +47,14 @@ class LayerWeight(CommonWeight):
         using activation as detailed mask.
 
         Args:
-            smap (Tensor): the saliency map.
+            final_smap (Tensor): the saliency map.
             activation (Tensor): activation.
             factor (int): scale factor.
 
         Returns:
             Tensor: saliency map which is increased its resolution.
         """
+        # positive and negative mask
         mask_p: Tensor = F.relu(activation).max(dim=1, keepdim=True).values
         mask_m: Tensor = F.relu(-activation).max(dim=1, keepdim=True).values
         # blur mask
@@ -73,7 +74,42 @@ class LayerWeight(CommonWeight):
             )
             + self.eps
         )
-        final_smap = (mask_p * F.relu(smap)) - (mask_m * F.relu(-smap))
+        # mask saliency map
+        final_smap = (mask_p * F.relu(final_smap)) - (
+            mask_m * F.relu(-final_smap)
+        )
+        return final_smap
+
+    def _merge_saliency_maps(
+        self: LayerWeight,
+        final_smap: Tensor,
+        smap: Tensor,
+    ) -> Tensor:
+        """merge base saliency map and current saliency map
+        using base saliency map as mask.
+
+        Args:
+            final_smap (Tensor): base saliency map.
+            smap (Tensor): current saliency map.
+
+        Returns:
+            Tensor: merged saliency map.
+        """
+        # positive and negative mask
+        mask_p: Tensor = torch.where(final_smap > 0, 1.0, 0.0)
+        mask_m: Tensor = torch.where(final_smap < 0, 1.0, 0.0)
+        # take max between base saliency map and current saliency map
+        final_smap_p = (
+            torch.stack([F.relu(final_smap), F.relu(mask_p * smap)], dim=0)
+            .max(dim=0)
+            .values
+        )
+        final_smap_m = (
+            torch.stack([F.relu(-final_smap), F.relu(-(mask_m * smap))], dim=0)
+            .max(dim=0)
+            .values
+        )
+        final_smap = final_smap_p - final_smap_m
         return final_smap
 
     def weight_layer(
@@ -103,13 +139,8 @@ class LayerWeight(CommonWeight):
         # prepare the saliency map of the last layer
         final_smap: Tensor = smaps[0]
         base_u, base_v = position_shape(ctx.activations[0])
-        if not position_shape(final_smap) == (base_u, base_v):
-            # downsampling
-            final_smap = F.interpolate(
-                final_smap,
-                size=(base_u, base_v),
-                mode="bilinear",
-            )
+        if DEBUG:
+            assert position_shape(final_smap) == (base_u, base_v)
         # normalize
         final_smap = (final_smap / final_smap.max()).clamp(min=-1.0, max=1.0)
         # merge layers
@@ -122,14 +153,8 @@ class LayerWeight(CommonWeight):
                 assert u % base_u == 0
                 assert u > base_u
                 assert (u // base_u) * base_v == v
-            if not position_shape(smap) == (u, v):
-                # downsampling
-                smap = F.interpolate(
-                    smap,
-                    size=(u, v),
-                    mode="bilinear",
-                )
-            # normalize
+                assert position_shape(smap) == (u, v)
+            # normalize current saliency map
             smap = (smap / smap.max()).clamp(min=-1.0, max=1.0)
             # scale factor
             factor: int = u // base_u
@@ -139,27 +164,20 @@ class LayerWeight(CommonWeight):
                 scale_factor=factor,
                 mode="bilinear",
             )
-            final_smap = (final_smap / final_smap.max()).clamp(min=-1, max=1)
+            # merge
             if self.high_resolution_:
                 # high resolution
                 final_smap = self._high_resolution(
-                    smap=final_smap,
+                    final_smap=final_smap,
                     activation=acti,
                     factor=factor,
                 )
             else:
-                # take max between base saliency map and current saliency map
-                final_smap_p = (
-                    torch.stack([F.relu(final_smap), F.relu(smap)], dim=0)
-                    .max(dim=0)
-                    .values
+                # merge saliency map simply
+                final_smap = self._merge_saliency_maps(
+                    final_smap=final_smap,
+                    smap=smap,
                 )
-                final_smap_m = (
-                    torch.stack([F.relu(-final_smap), F.relu(-smap)], dim=0)
-                    .max(dim=0)
-                    .values
-                )
-                final_smap = final_smap_p - final_smap_m
             base_u = u
             base_v = v
         smaps.clear()

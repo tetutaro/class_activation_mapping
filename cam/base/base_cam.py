@@ -122,8 +122,10 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
         random_state: Optional[int] = None,
         **kwargs: Any,
     ) -> None:
-        # initialize flags
+        # the target layer have to be the last Conv. Layer
         self.target_last_layer_: bool = False
+        # the number of target layer have to be 1
+        self.target_one_layer_: bool = False
         # initialize parents
         super().__init__(
             batch_size=batch_size,
@@ -152,6 +154,8 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
             self.set_class_weights(class_weights=self.get_class_weights())
         if channel_weight == "ablation":
             self.target_last_layer_ = True
+        if channel_group != "none":
+            self.target_one_layer_ = True
         # set random seeds
         if self.random_state is not None:
             self._set_random_seeds()
@@ -282,6 +286,10 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
                 target_layers[0] != self.conv_layers[-1]
             ):
                 raise ValueError('target should be "last"')
+        # check number of target is 1
+        if self.target_one_layer_:
+            if len(target_layers) > 1:
+                raise ValueError("the number of target should be 1")
         return target_layers
 
     def _set_title(

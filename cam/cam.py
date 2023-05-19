@@ -183,6 +183,7 @@ class CAM:
                 '"set_cam_name" not implemented when LIME'
             )
         self.cam.set_cam_name(cam_name=cam_name)
+        self.cam_model = cam_name
         return
 
     def show_labels(self: CAM) -> None:

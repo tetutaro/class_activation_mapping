@@ -57,7 +57,7 @@ class ChannelWeight(CommonWeight):
         self.normalize_softmax_: bool = normalize_softmax
         self.n_channels_: int = n_channels
         self.n_groups_: Optional[int] = n_groups
-        if self.channel_weight == "none":
+        if self.channel_weight == "none" and self.channel_group == "none":
             self.channel_minmax_ = False
         self.inertias_: Dict[str, List[float]]
         return
@@ -452,6 +452,28 @@ class ChannelWeight(CommonWeight):
         Returns:
             SaliencyMaps: summed saliency maps.
         """
+        # the function to create channel group map
+        group_fn: Callable[[Tensor, Context], Tensor]
+        if self.channel_group == "none":
+            group_fn = self._channel_group_none
+        elif self.channel_group == "k-means":
+            group_fn = self._channel_group_kmeans
+        elif self.channel_group == "spectral":
+            group_fn = self._channel_group_spectral
+        else:
+            raise SystemError(f"invalid channel_group: {self.channel_group}")
+        # the function to create weight for each channel groups
+        weight_fn: Callable[[Tensor, Tensor, Context], Tensor]
+        if self.channel_weight == "none":
+            weight_fn = self._channel_weight_none
+        elif self.channel_weight == "eigen":
+            weight_fn = self._channel_weight_eigen
+        elif self.channel_weight == "ablation":
+            weight_fn = self._channel_weight_ablation
+        elif self.channel_weight == "abscission":
+            weight_fn = self._channel_weight_abscission
+        else:
+            raise SystemError(f"invalid channel_weight: {self.channel_weight}")
         if self.channel_weight == "abscission":
             # forcibly enlarge saliency maps to the original image size
             smaps = ctx.enlarge_fn(smaps=smaps)
@@ -463,38 +485,12 @@ class ChannelWeight(CommonWeight):
                 # channel saliency map is already created
                 merged_smaps.append(smap.clone())
                 continue
-            # the function to create channel group map
-            group_fn: Callable[[Tensor, Context], Tensor]
-            if self.channel_group == "none":
-                group_fn = self._channel_group_none
-            elif self.channel_group == "k-means":
-                group_fn = self._channel_group_kmeans
-            elif self.channel_group == "spectral":
-                group_fn = self._channel_group_spectral
-            else:
-                raise SystemError(
-                    f"invalid channel_group: {self.channel_group}"
-                )
-            # the function to create weight for each channel groups
-            weight_fn: Callable[[Tensor, Tensor, Context], Tensor]
-            if self.channel_weight == "none":
-                weight_fn = self._channel_weight_none
-            elif self.channel_weight == "eigen":
-                weight_fn = self._channel_weight_eigen
-            elif self.channel_weight == "ablation":
-                weight_fn = self._channel_weight_ablation
-            elif self.channel_weight == "abscission":
-                weight_fn = self._channel_weight_abscission
-            else:
-                raise SystemError(
-                    f"invalid channel_weight: {self.channel_weight}"
-                )
             # create channel group map
             gmap: Tensor = group_fn(smap=smap, ctx=ctx)
-            # group saliency map
+            # grouped saliency map
             g: int = batch_shape(gmap)
             g_smap: Tensor = (gmap @ smap.view(k, -1)).view(1, g, u, v)
-            # weight grouped saliency map and sum over channels
+            # weight for grouped saliency map
             g_weight: Tensor = weight_fn(g_smap=g_smap, gmap=gmap, ctx=ctx)
             if self.channel_minmax_:
                 # cognition-base and cognition-scissors
@@ -512,7 +508,7 @@ class ChannelWeight(CommonWeight):
                 g_weight[base] = val
                 g_weight[scis] = -(1.0 - val)
             g_weight = g_weight.view(1, g, 1, 1)
-            # merge channels (weighted sum)
+            # weight grouped saliency map and sum over channels
             g_smap = (g_weight * g_smap).sum(dim=1, keepdim=True)
             # centerize
             g_smap -= g_smap.median()

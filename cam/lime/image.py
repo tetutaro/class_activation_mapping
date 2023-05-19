@@ -211,6 +211,16 @@ class LimeImage(NetworkWeight):
         # title
         if title is None:
             label_name: str = self.labels[self.explain_.top_labels[rank]]
+            if len(label_name) > 12:
+                label_names: List[str]
+                if " " in label_name:
+                    label_names = label_name.split()
+                else:
+                    label_names = label_name.split("-")
+                label_name = " ".join(
+                    [x[0].upper() + "." for x in label_names[:-1]]
+                )
+                label_name += " " + label_names[-1]
             if title_score:
                 label_name += f" ({self.preds_[rank].score:.4f})"
             if title_model:
