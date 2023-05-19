@@ -101,9 +101,11 @@ class ChannelWeight(CommonWeight):
         Returns:
             int: the optimal number of groups
         """
-        # estimate the max number of groups based on the Sturges' Rule
         n_data: int = features.shape[0]
-        max_groups: int = int(np.ceil(np.log2(n_data))) + 2
+        # estimate the max number of groups based on the Square-Root Choice
+        max_groups: int = int(np.ceil(np.sqrt(n_data))) + 1
+        # estimate the max number of groups based on the Sturges' Formula
+        # max_groups: int = int(np.ceil(np.log2(n_data))) + 2
         if max_groups < 5:
             return 3
         n_groups_list: List[int] = list(range(3, max_groups))
