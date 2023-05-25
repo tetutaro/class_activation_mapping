@@ -63,6 +63,7 @@ class LayerWeight(CommonWeight):
                 F.avg_pool2d(mask_p, kernel_size=factor),
                 scale_factor=factor,
                 mode="bilinear",
+                align_corners=False,
             )
             + self.eps
         )
@@ -71,6 +72,7 @@ class LayerWeight(CommonWeight):
                 F.avg_pool2d(mask_m, kernel_size=factor),
                 scale_factor=factor,
                 mode="bilinear",
+                align_corners=False,
             )
             + self.eps
         )
@@ -163,6 +165,7 @@ class LayerWeight(CommonWeight):
                 final_smap,
                 scale_factor=factor,
                 mode="bilinear",
+                align_corners=False,
             )
             # merge
             if self.high_resolution_:

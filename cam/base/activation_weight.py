@@ -130,7 +130,9 @@ class ActivationWeight(CommonWeight):
         # gradient_max: float = np.nanmax(gradient_nan)
         # gradient_min: float = np.nanmin(gradient_nan)
         # return gradient.clamp(min=gradient_min, max=gradient_max)
-        return torch.where(gradient.isinf(), 0.0, gradient)
+        return torch.where(
+            gradient.isinf(), 0.0, gradient.to(torch.double)
+        ).to(torch.float)
 
     def _arrange_weight(
         self: ActivationWeight,

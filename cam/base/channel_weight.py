@@ -192,7 +192,7 @@ class ChannelWeight(CommonWeight):
         if DEBUG:
             assert channel_shape(gmap) == k
             assert torch.allclose(
-                gmap.sum(dim=1), torch.ones(batch_shape(gmap))
+                gmap.sum(dim=1), torch.ones(batch_shape(gmap)).to(self.device)
             )
         return gmap
 
@@ -239,7 +239,7 @@ class ChannelWeight(CommonWeight):
         if DEBUG:
             assert channel_shape(gmap) == k
             assert torch.allclose(
-                gmap.sum(dim=1), torch.ones(batch_shape(gmap))
+                gmap.sum(dim=1), torch.ones(batch_shape(gmap)).to(self.device)
             )
         return gmap
 
@@ -297,8 +297,10 @@ class ChannelWeight(CommonWeight):
         # SVD (singular value decomposition)
         # Gs = channel group space, ss = eigen-values
         Gs, ss, _ = torch.linalg.svd(GP_std, full_matrices=False)
+        if torch.is_complex(Gs):
+            Gs = Gs.real
         # retrieve the first eigen-vector and normalize it
-        weight: Tensor = F.normalize(Gs.real[:, ss.argmax()], dim=0)
+        weight: Tensor = F.normalize(Gs[:, ss.argmax()], dim=0)
         # check the sign of weight
         if (
             weight.view(1, g, 1, 1) * F.relu(g_smap - g_smap.median())
@@ -392,7 +394,7 @@ class ChannelWeight(CommonWeight):
             )[: self.n_channels_]
         assert len(mask_dicts) > 1
         # get baseline score and logit
-        base_score: Tensor = F.sigmoid(
+        base_score: Tensor = torch.sigmoid(
             ctx.forward_fn(image=ctx.blurred_image)
         )[:, ctx.label].squeeze()
         base_logit: Tensor = (base_score / (1.0 - base_score)).log()
@@ -405,7 +407,7 @@ class ChannelWeight(CommonWeight):
             masked_list.append(masked)
         maskedes: Tensor = torch.cat(masked_list, dim=0)
         # forward network then retrieve abscission score and logit
-        absc_score: Tensor = F.sigmoid(ctx.forward_fn(image=maskedes))[
+        absc_score: Tensor = torch.sigmoid(ctx.forward_fn(image=maskedes))[
             :, ctx.label
         ]
         absc_logit: Tensor = (absc_score / (1.0 - absc_score)).log()
@@ -424,8 +426,8 @@ class ChannelWeight(CommonWeight):
             )
             weight = (
                 torch.zeros(g)
-                .scatter(dim=0, index=idx, src=cic_scores)
                 .to(self.device)
+                .scatter(dim=0, index=idx, src=cic_scores)
             )
             del cic_scores
         else:
