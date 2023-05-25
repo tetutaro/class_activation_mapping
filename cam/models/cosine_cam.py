@@ -10,15 +10,7 @@ from cam.backbones.backbone import Backbone
 class CosineCAM(BaseCAM):
     """Cosine-CAM
 
-    Cluster-CAM + Eigen-CAM
-
-    to cluster channels, Cluster-CAM uses channel-position matrix.
-    add Eigen-CAM's method here.
-    divide channel-position matrix using SVD and get channel space,
-    and normalize each channel vectors in channel space.
-    by normalizing channel vectors,
-    euclidean distances between vectors can assume (psude) cosine distance.
-    then, cluster these vectors using Spectral Clustering.
+    normalize channel-position matrix before k-Means.
 
     Args:
         backbone (Backbone): resouce of CNN.
@@ -44,7 +36,7 @@ class CosineCAM(BaseCAM):
             backbone=backbone,
             activation_weight="gradient",
             channel_weight="abscission",
-            channel_group="spectral",
+            channel_group="k-means",
             channel_cosine=True,
             n_channels=n_channels,
             n_groups=n_groups,

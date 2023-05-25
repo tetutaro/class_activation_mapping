@@ -15,8 +15,8 @@ from cam.models.ablation_cam import AblationCAM
 from cam.models.score_cam import ScoreCAM
 from cam.models.group_cam import GroupCAM
 from cam.models.cluster_cam import ClusterCAM
-from cam.models.poly_cam import PolyCAM
 from cam.models.cosine_cam import CosineCAM
+from cam.models.poly_cam import PolyCAM
 
 __all__ = [
     "DummyCAM",
@@ -34,6 +34,6 @@ __all__ = [
     "ScoreCAM",
     "GroupCAM",
     "ClusterCAM",
-    "PolyCAM",
     "CosineCAM",
+    "PolyCAM",
 ]

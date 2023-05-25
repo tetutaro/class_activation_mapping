@@ -81,13 +81,9 @@ class ChannelWeight(CommonWeight):
         k: int = channel_shape(smap)
         # create channel x position matrix
         CP: Tensor = smap.view(k, -1)
-        if not self.channel_cosine_:
-            return CP.detach().cpu().numpy()
-        CP_std: Tensor = (CP - CP.mean()) / CP.std()
-        # SVD (singular value decomposition)
-        # Cs = channel space
-        Cs, _, _ = torch.linalg.svd(CP_std, full_matrices=False)
-        return F.normalize(Cs.real, dim=1).detach().cpu().numpy()
+        if self.channel_cosine_:
+            CP = F.normalize(CP, dim=1)
+        return CP.detach().cpu().numpy()
 
     def _estimate_n_groups(
         self: ChannelWeight,
