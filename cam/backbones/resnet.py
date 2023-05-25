@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Type, List, DefaultDict, Union, Optional, Any
 from collections import defaultdict
 
-import torch
 from torch import Tensor
 import torch.nn as nn
 from torchvision.models import (
@@ -75,32 +74,10 @@ class wResNet(ResNet):
                 return param[1].data.clone().detach()
 
     def forward_classifier(self: wResNet, activation: Tensor) -> Tensor:
-        """forward the activation of the last Conv. Layer
-        to the classifier block of the CNN model.
-
-        Args:
-            activation (Tensor): activation
-
-        Returns:
-            Tensor: score
+        """because of shortcut connections in the Residual block,
+        it is impossible to forward activation just after the Conv. Layer.
         """
-        identity: Tensor = activation
-        last_block: Union[BasicBlock, Bottleneck] = self.layer4[-1]
-        bn: nn.Module
-        if isinstance(last_block, BasicBlock):
-            bn = last_block.bn2
-        else:  # isinstance(self.layer4, Bottleneck)
-            bn = last_block.bn3
-        activation = bn(activation)
-        if last_block.downsample is not None:
-            identity = last_block.downsample(activation)
-        activation += identity
-        return self.fc(
-            torch.flatten(
-                self.avgpool(last_block.relu(activation)),
-                1,
-            )
-        )
+        raise NotImplementedError("Resnet doesn't support Ablation-CAM")
 
 
 def _w_resnet(
