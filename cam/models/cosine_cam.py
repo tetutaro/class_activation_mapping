@@ -34,7 +34,7 @@ class CosineCAM(BaseCAM):
     ) -> None:
         super().__init__(
             backbone=backbone,
-            activation_weight="gradient",
+            activation_weight="axiom",
             channel_weight="abscission",
             channel_group="k-means",
             channel_cosine=True,
