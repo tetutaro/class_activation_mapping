@@ -19,9 +19,16 @@ from cam.base.context import Context
 
 
 class LayerWeight(CommonWeight):
-    """A part of the CAM model that is responsible for final saliency map.
+    """A part of the CAM model that is responsible for merging layers.
 
-    XXX
+    Zoom-CAM and Layer-CAM are the models that propose
+    merging multiple layers.
+    But I was unable to implement that produce the results
+    as described in the papers of these models.
+
+    But, Poly-CAM uses the upper layer as a mask to increase the resolution
+    instead of merging multiple layers.
+    I could implement that.
 
     Args:
         high_resolution (bool): if True, produce high resolution heatmap.

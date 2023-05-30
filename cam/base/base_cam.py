@@ -39,37 +39,31 @@ from cam.utils.display import (
 class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
     """The base class for all CAM models.
 
-    The aim of CAM model is to create a "Saliency Map" that represents
-    which regions of the original image
-    the CNN model pays attention (or doesn't pay attention)
-    to determine the indicated label.
+    The aim of CAM models is to create a "Saliency Map" that represents
+    the discriminative regions of the original image
+    (the region that the CNN model pays attention (or doesn't pay attention)
+    to determine the indicated label).
 
-    There are following 5 processes to create the saliency map.
+    To create the saliency map,
+    CAM models retrieve "Activation"
+    (output of Conv. Layer when forward the original image to the CNN),
+    weight them with some weight,
+    and merge them over channels and layers.
+    (Sometimes "Activation" is named as "Feature Map".)
 
-    #. forward the image to CNN and get activations
-        * if needed, backward the score and get gradients (require_grad=True)
-        * self._forward()
-    #. create weights for activations
-        * self._create_weights()
-    #. weight activation with the weights and enlarge them to the image size
-        * I named the weighted activation as "Channel Saliency Map"
-        * self._create_channel_smaps()
-    #. merge channel saliency maps over channels
-        * I named the merged channel saliency map as "Layer Saliency Map"
-        * self._create_layer_smaps()
-    #. merge enlarged layer saliency maps over layers
-        * and then, the final saliency map is created
-        * self._merge_layer_smaps()
+    One of the strong candidates for the weight of activations is
+    "Gradient" (output of Conv. Layer when backword the score to the CNN).
 
-    The final saliency map also be able to call "Heatmap"
-    that represents which regions the CNN model pays attention (or doesn't)
-    with colors.
+    There are following 4 processes to create the saliency map.
 
-    Here, the aim of CAM models is shown by displaying the heatmap
-    overlaid on the original image. (self._draw_image())
-
-    Only you have to do is create instance of the class of CAM model
-    and call model.draw().
+    #. forward the image to CNN and get activations, scores and gradients.
+        * -> cam.base.network_weight.NetworkWeight.acquires_gred()
+    #. create weights for activations from Gradients (or class weight)
+        * -> cam.base.activation_weight.ActivationWeight.weight_activation()
+    #. group (cluster) channels and weight for each channel (group)
+        * -> cam.base.channel_weight.ChannelWeight.weight_channel()
+    #. merge layers
+        * -> cam.base.layer_weight.LayerWeight.weight_layer()
 
     Args:
         backbone (Backbone): resource of the CNN model.
@@ -77,10 +71,10 @@ class BaseCAM(NetworkWeight, ActivationWeight, ChannelWeight, LayerWeight):
         n_divides (int): number of divides. (use it in IntegratedGrads)
         n_samples (int): number of samplings. (use it in SmoothGrad)
         sigma (float): sdev of Normal Dist. (use it in SmoothGrad)
-        activation_weight (str): the type of weight for each activations.
+        activation_weight (str): the type of weight for each activation.
         gradient_smooth (str): the method of smoothing gradient.
         gradient_no_gap (bool): if True, use gradient as is.
-        channel_weight (str): the method of weighting for each channels.
+        channel_weight (str): the method of weighting for each channel.
         channel_group (str): the method of creating groups.
         channel_cosine (bool): if True, use cosine distance at clustering.
         channel_minmax (bool): if True, adopt the best&worst channel only.

@@ -23,12 +23,21 @@ from cam.base.context import Context
 
 
 class ChannelWeight(CommonWeight):
-    """A part of the CAM model that is responsible for channel saliency maps.
+    """A part of the CAM model that is responsible for merging channels.
 
-    XXX
+    Eigen-CAM, Ablation-CAM and Score-CAM are the models
+    that have the characteristic of calculating
+    appropriate weights for each channel.
+
+    But, especially the last Conv. Layer, Conv. Layer has too many channels,
+    so it is needed to cluster them.
+
+    Group-CAM, Cluster-CAM and Cosine-CAM (original implementation)
+    are the models that have the characteristic of clustering
+    channels.
 
     Args:
-        channel_weight (str): the method of weighting for each channels.
+        channel_weight (str): the method of weighting for each channel.
         channel_group (str): the method of creating groups.
         channel_cosine (bool): if True, use cosine distance at clustering.
         channel_minmax (bool): if True, adopt the best&worst channel only.
@@ -251,7 +260,7 @@ class ChannelWeight(CommonWeight):
         gmap: Tensor,
         ctx: Context,
     ) -> Tensor:
-        """weight by the number of channels for each channel groups.
+        """weight by the number of channels for each channel group.
 
         Args:
             g_smap (Tensor):
@@ -260,7 +269,7 @@ class ChannelWeight(CommonWeight):
             ctx (Context): the context of this process.
 
         Returns:
-            Tensor: weight for each channel groups.
+            Tensor: weight for each channel group.
         """
         return torch.where(gmap > 0, 1.0, 0.0).sum(dim=1) / channel_shape(gmap)
 
@@ -275,10 +284,10 @@ class ChannelWeight(CommonWeight):
         The grouped saliency map is divided into
         the channel group space and the positoin space by
         SVD (Singular Value Decomposition).
-        Each vertical vectors in the channel group space
+        Each vertical vector in the channel group space
         is the eigen-vector of the channel group space.
         use the first eigen-vector (that has the highest eigen-value)
-        of the channel group space as the weight for each channel groups.
+        of the channel group space as the weight for each channel group.
 
         Args:
             g_smap (Tensor):
@@ -287,7 +296,7 @@ class ChannelWeight(CommonWeight):
             ctx (Context): the context of this process.
 
         Returns:
-            Tensor: weight for each channel groups.
+            Tensor: weight for each channel group.
         """
         g: int = channel_shape(g_smap)
         # create group x position matrix
@@ -323,7 +332,7 @@ class ChannelWeight(CommonWeight):
             ctx (Context): the context of this process.
 
         Returns:
-            Tensor: weight for each channel groups.
+            Tensor: weight for each channel group.
         """
         if DEBUG:
             len(ctx.activations) == 1
@@ -353,7 +362,7 @@ class ChannelWeight(CommonWeight):
         """CIC (Channel-wise Increase of Confidence) scores.
 
         calc CIC (Channel-wise Increase of Confidence) scores
-        as a weight for each channels.
+        as a weight for each channel.
         Here, I named this method as "Abscission"
         (in contrast with "Ablation").
 
@@ -364,7 +373,7 @@ class ChannelWeight(CommonWeight):
             ctx (Context): the context of this process.
 
         Returns:
-            Tensor: weight for each channel groups.
+            Tensor: weight for each channel group.
         """
         # create grouped saliency map
         _, g, u, v = g_smap.shape
@@ -441,7 +450,7 @@ class ChannelWeight(CommonWeight):
         smaps: SaliencyMaps,
         ctx: Context,
     ) -> SaliencyMaps:
-        """group and weight each channels and sum them up.
+        """group and weight each channel and sum them up.
 
         Args:
             smaps (SaliencyMaps): saliency maps.
@@ -460,7 +469,7 @@ class ChannelWeight(CommonWeight):
             group_fn = self._channel_group_spectral
         else:
             raise SystemError(f"invalid channel_group: {self.channel_group}")
-        # the function to create weight for each channel groups
+        # the function to create weight for each channel group
         weight_fn: Callable[[Tensor, Tensor, Context], Tensor]
         if self.channel_weight == "none":
             weight_fn = self._channel_weight_none
@@ -475,7 +484,7 @@ class ChannelWeight(CommonWeight):
         if self.channel_weight == "abscission":
             # forcibly enlarge saliency maps to the original image size
             smaps = ctx.enlarge_fn(smaps=smaps)
-        # weight and merge channels for each layers
+        # weight and merge channels for each layer
         merged_smaps: SaliencyMaps = SaliencyMaps()
         for smap in smaps:
             _, k, u, v = smap.size()

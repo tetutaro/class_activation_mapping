@@ -2,7 +2,7 @@
 # -*- coding:utf-8 -*-
 """the module of containers for activations and gradients
 
-Each activations and gradients have
+Each activation and gradient have
 different number of width, height and channels by the layer they was retrieved.
 (But each number of batch is the same)
 """
@@ -86,10 +86,10 @@ class Weights:
         return len(self.list_cache_)
 
     def __str__(self: Weights) -> str:
-        """returns shapes of each weights in the cache.
+        """returns shapes of each weight in the cache.
 
         Returns:
-            str: shapes of each weights in the cache.
+            str: shapes of each weight in the cache.
         """
         if self.list_cache_ is None:
             raise SystemError("forget finalizing")

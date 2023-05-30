@@ -22,7 +22,7 @@ smooth_types: List[str] = [
     "integral",  # IntegratedGrads
     "noise+integral",  # SmoothGrad + IntegratedGrads
 ]
-# types of weights for each activations
+# types of weight for each activation
 activation_weights: List[str] = [
     "none",  # all values == 1
     "fake",  # Fake-CAM
@@ -31,7 +31,7 @@ activation_weights: List[str] = [
     "gradient++",  # Grad-CAM++
     "axiom",  # XGrad-CAM
 ]
-# methods of weighting for each channels
+# methods of weighting for each channel
 channel_weights: List[str] = [
     "none",  # average over channels
     "eigen",  # first eigen-vector (Eigen-CAM)
@@ -40,7 +40,7 @@ channel_weights: List[str] = [
 ]
 # clustering methods for channels
 group_types: List[str] = [
-    "none",  # calc weight for each channels
+    "none",  # calc weight for each channel
     "k-means",  # k-Means (Group-CAM)
     "spectral",  # Spectral Clustering (Cluster-CAM)
 ]

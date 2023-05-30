@@ -41,21 +41,6 @@ class NetworkWeight(CommonWeight):
     #. "avgpool part": average the output of the feature part (net.avgpool)
     #. "classifier part": classify image with the given labels (net.classifier)
 
-    CAM models create a "Saliency Map" that represents
-    which regions of the original image
-    the CNN model pays attention (or doesn't pay attention)
-    to determine the indicated label.
-
-    To create the saliency map,
-    CAM models retrieve "Activation"s
-    (output of Conv. Layer when forward the original image to the CNN),
-    weight them with some weight,
-    and merge them over channels and layers.
-    (Sometimes "Activation" is named as "Feature Map".)
-
-    One of the strong candidates for the weight of activations is
-    "Gradient"s (output of Conv. Layer when backword the score to the CNN).
-
     To retrieve activations and gradients,
     hook functions to target Conv. (Convolutional) Layers
     in the feature part of the CNN. (self._hook_target_layer())
@@ -276,7 +261,7 @@ class NetworkWeight(CommonWeight):
 
     def _get_conv_layers(self: NetworkWeight) -> None:
         """get names of the last Conv. Layers
-        for each blocks in the feature part.
+        for each block in the feature part.
         """
         # clear cache
         self._clear_cache()
@@ -287,7 +272,7 @@ class NetworkWeight(CommonWeight):
         all_conv_layers: DefaultDict[
             int, List[str]
         ] = self.net_.get_all_conv_layers()
-        # select the last Conv. Layer for each blocks
+        # select the last Conv. Layer for each block
         for block, names in all_conv_layers.items():
             last_name: str = names[-1]
             info_conv_layers[block] = {
@@ -413,13 +398,13 @@ class NetworkWeight(CommonWeight):
     # ## forward functions
 
     def _forward_batches(self: NetworkWeight, image: Tensor) -> Tensor:
-        """forward image to CNN for each batches.
+        """forward image to CNN for each batch.
 
         Args:
             image (Tensor): the image.
 
         Returns:
-            Tensor: scores for each labels
+            Tensor: scores for each label
         """
         # forward network
         with torch.no_grad():
@@ -433,7 +418,7 @@ class NetworkWeight(CommonWeight):
             image (Tensor): the image.
 
         Returns:
-            Tensor: scores for each labels
+            Tensor: scores for each label
         """
         if DEBUG:
             assert self.target_layers_ is None
@@ -640,7 +625,7 @@ class NetworkWeight(CommonWeight):
         self: NetworkWeight,
         activation: Tensor,
     ) -> Tensor:
-        """forward activation to the classifier part of CNN for each batches.
+        """forward activation to the classifier part of CNN for each batch.
 
         Args:
             activation (Tensor): activation of the last Conv. Layer

@@ -58,7 +58,7 @@ def merge_acquired_list(acquired_list: List[Acquired]) -> Acquired:
         shape_list: List[Shape] = [
             x.size() for x in acquired_list[0].activations
         ]
-    # distibute activation and gradient for each layres
+    # distibute activation and gradient for each layer
     activation_lists: List[List[Weights]] = [[] for _ in range(n_layers)]
     gradient_lists: List[List[Weights]] = [[] for _ in range(n_layers)]
     scores_list: List[Tensor] = list()
@@ -123,7 +123,7 @@ def merge_acquired(
     """
     activations: Weights = Weights()
     gradients: Weights = Weights()
-    # merge for each layers
+    # merge for each layer
     for activation, gradient in zip(acquired.activations, acquired.gradients):
         shape: Shape = activation.size()
         if DEBUG:

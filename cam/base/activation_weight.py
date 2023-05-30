@@ -12,15 +12,27 @@ from cam.base.context import Context
 
 
 class ActivationWeight(CommonWeight):
-    """A part of the CAM model that is responsible for raw saliency maps.
+    """A part of the CAM model that is responsible for the weight
+    for activations that is created from gradiens.
 
-    ActivationWeight (output of Conv. Layer(s) when forwarding) represent
-    which region of image was payed attention to recognize the target object.
+    One of good weight for activations is "class weight"
+    (weight of the classifier part of CNN) (= Vanilla CAM).
+    But, there is some strong architectual restrictions to use the class weight
+    (not all CNNs can apply Vanilla CAM).
 
-    XXX
+    Gradient is another good weight for activations (Grad-CAM).
+    Gradient can be retrieved from any CNN.
+    However, Gradient has the problem.
+    Gradient tends to be unstable and produce noise.
+
+    Grad-CAM++, Smooth Grad-CAM++, IntegratedGrads and XGrad-CAM are
+    the model that smooth gradients.
+
+    HiRes-CAM is an exception. while other models globally avaraging
+    the gradients, HiRes-CAM uses the gradient as is.
 
     Args:
-        activation_weight (str): the type of weight for each activations.
+        activation_weight (str): the type of weight for each activation.
         gradient_smooth (str): the method of smoothing gradient.
         gradient_no_gap (bool): if True, use gradient as is.
     """
@@ -77,7 +89,7 @@ class ActivationWeight(CommonWeight):
         self: ActivationWeight,
         ctx: Context,
     ) -> Weights:
-        """returns the dummy weight (each values of weight = 1).
+        """returns the dummy weight (each value of weight = 1).
 
         Args:
             ctx (Context): the context of this process.

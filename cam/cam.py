@@ -58,10 +58,10 @@ class CAM:
         n_divides (int): number of divides. (use it in IntegratedGrads)
         n_samples (int): number of samplings. (use it in SmoothGrad)
         sigma (float): sdev of Normal Dist. (use it in SmoothGrad)
-        activation_weight (str): the type of weight for each activations.
+        activation_weight (str): the type of weight for each activation.
         gradient_smooth (str): the method of smoothing gradient.
         gradient_no_gap (bool): if True, use gradient as is.
-        channel_weight (str): the method of weighting for each channels.
+        channel_weight (str): the method of weighting for each channel.
         channel_group (str): the method of creating groups.
         channel_cosine (bool): if True, use cosine distance at clustering.
         channel_minmax (bool): if True, adopt the best&worst channel only.
@@ -334,7 +334,7 @@ def main() -> None:
         type=str,
         choices=activation_weights,
         default="none",
-        help="the type of weight for each activations",
+        help="the type of weight for each activation",
     )
     parser.add_argument(
         "--gradient-smooth",
@@ -351,7 +351,7 @@ def main() -> None:
         type=str,
         choices=channel_weights,
         default="none",
-        help="the method of weighting for each channels",
+        help="the method of weighting for each channel",
     )
     parser.add_argument(
         "--channel-group",
